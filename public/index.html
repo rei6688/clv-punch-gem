@@ -1,48 +1,114 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Auto Punch — Dashboard</title>
-  <meta name="description" content="Auto Punch management dashboard for Cyberlogitec Blueprint check-in system." />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👊</text></svg>" />
-  <link rel="stylesheet" href="/css/style.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            border: "hsl(240 5.9% 10%)",
+            background: "hsl(240 10% 4%)",
+            foreground: "hsl(0 0% 98%)",
+            primary: {
+              DEFAULT: "hsl(263.4 70% 50.4%)",
+              foreground: "hsl(210 40% 98%)",
+            },
+            secondary: {
+              DEFAULT: "hsl(240 3.7% 15.9%)",
+              foreground: "hsl(0 0% 98%)",
+            },
+            muted: {
+              DEFAULT: "hsl(240 3.7% 12.9%)",
+              foreground: "hsl(240 5% 64.9%)",
+            },
+            accent: {
+              DEFAULT: "hsl(240 3.7% 15.9%)",
+              foreground: "hsl(0 0% 98%)",
+            },
+            destructive: {
+              DEFAULT: "hsl(0 62.8% 30.6%)",
+              foreground: "hsl(0 0% 98%)",
+            },
+            success: "hsl(142.1 70.6% 45.3%)",
+            warning: "hsl(47.9 95.8% 53.1%)",
+          },
+          borderRadius: {
+            lg: "0.5rem",
+            md: "calc(0.5rem - 2px)",
+            sm: "calc(0.5rem - 4px)",
+          },
+        }
+      }
+    }
+  </script>
+  <style type="text/tailwindcss">
+    @layer base {
+      body { @apply bg-background text-foreground antialiased; }
+    }
+    @layer components {
+      .glass { @apply bg-slate-900/40 backdrop-blur-md border border-slate-800/50; }
+      .nav-tab-active { @apply text-primary bg-primary/10; }
+      .btn { @apply inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2; }
+      .btn-primary { @apply bg-primary text-primary-foreground shadow hover:bg-primary/90; }
+      .btn-secondary { @apply bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80; }
+      .btn-outline { @apply border border-slate-800 bg-transparent shadow-sm hover:bg-slate-800/50; }
+      .card { @apply rounded-xl border border-slate-800 bg-slate-950/50 shadow-sm transition-all hover:shadow-md; }
+    }
+    #toast-container { @apply fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none; }
+    .toast { @apply pointer-events-auto flex items-center gap-3 bg-slate-900 border border-slate-800 text-sm px-4 py-3 rounded-lg shadow-xl animate-in slide-in-from-right-10; }
+    .spinner { @apply animate-spin rounded-full h-8 w-8 border-b-2 border-primary; }
+  </style>
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👊</text></svg>" />
 </head>
-<body>
 
-  <!-- Navigation -->
-  <nav class="nav">
-    <a class="nav-logo" href="#dashboard">
-      <div class="logo-icon">👊</div>
-      <span>Auto Punch</span>
-    </a>
+<body class="min-h-screen flex flex-col">
 
-    <button class="nav-tab active" data-page="dashboard">
-      <span>🏠</span><span>Dashboard</span>
-    </button>
-    <button class="nav-tab" data-page="history">
-      <span>📋</span><span>History</span>
-    </button>
-    <button class="nav-tab" data-page="settings">
-      <span>⚙️</span><span>Settings</span>
-    </button>
+  <!-- Nav -->
+  <header class="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+    <div class="container mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-6">
+        <a href="#dashboard" class="flex items-center gap-2 font-bold text-lg">
+          <span class="text-xl">👊</span>
+          <span class="hidden sm:inline">Auto Punch</span>
+        </a>
+        <nav class="flex items-center gap-1 sm:gap-2">
+          <button class="nav-tab h-9 px-3 rounded-md text-sm font-medium transition-colors hover:text-primary active"
+            data-page="dashboard">Dashboard</button>
+          <button class="nav-tab h-9 px-3 rounded-md text-sm font-medium transition-colors hover:text-primary"
+            data-page="history">History</button>
+          <button class="nav-tab h-9 px-3 rounded-md text-sm font-medium transition-colors hover:text-primary"
+            data-page="settings">Settings</button>
+        </nav>
+      </div>
+      <div id="nav-clock"
+        class="text-xs font-mono text-muted-foreground bg-slate-900 px-2 py-1 rounded border border-slate-800">--:--:--
+        VN</div>
+    </div>
+  </header>
 
-    <div class="nav-clock" id="nav-clock">--:--:-- VN</div>
-  </nav>
-
-  <!-- App container -->
-  <main id="app">
-    <div class="loading">
+  <!-- Main -->
+  <main id="app" class="flex-1 container mx-auto px-4 py-8">
+    <div class="flex flex-col items-center justify-center min-h-[50vh] gap-4">
       <div class="spinner"></div>
-      Loading dashboard...
+      <p class="text-muted-foreground animate-pulse">Initializing Dashboard...</p>
     </div>
   </main>
 
-  <!-- Toast container -->
+  <!-- Modals & Overlays -->
+  <div id="modal-root"></div>
   <div id="toast-container"></div>
 
-  <!-- App script (ES module) -->
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
   <script type="module" src="/js/app.js"></script>
 
 </body>
+
 </html>

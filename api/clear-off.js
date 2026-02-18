@@ -24,7 +24,7 @@ function getDateKeyFromRequest(req) {
   return getVietnamDateKey(); // Mặc định là hôm nay
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const rid = req.headers['x-vercel-id'] || Date.now().toString();
   const ok = (data = {}) => res.status(200).json({ ok: true, requestId: rid, ...data });
   const bad = (code, msg) => res.status(code).json({ ok: false, error: msg, requestId: rid });

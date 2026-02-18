@@ -66,15 +66,21 @@ export async function updateConfig(isEnabled) {
 }
 
 /** POST /api/mark-done — mark period as manually done */
-export async function markDone(period, date) {
+export async function markDone(period, date, clear = false) {
     const body = { period };
     if (date) body.date = date;
+    if (clear) body.clear = true;
     return apiPost('/api/mark-done', body);
 }
 
 /** POST /api/mark-off — mark a day as OFF */
 export async function markOff(date) {
     return apiPost('/api/mark-off', { date });
+}
+
+/** POST /api/mark-off — dải ngày */
+export async function markOffRange(startDate, endDate) {
+    return apiPost('/api/mark-off', { startDate, endDate });
 }
 
 /** POST /api/clear-off — clear OFF for a day */

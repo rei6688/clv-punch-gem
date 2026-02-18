@@ -2,7 +2,7 @@
 // DEV ONLY — returns PUNCH_SECRET so the local dashboard can auto-fill.
 // This endpoint is BLOCKED in production (returns 404).
 
-export default function handler(req, res) {
+module.exports = function handler(req, res) {
     // Hard-block in production
     if (process.env.VERCEL_ENV === 'production') {
         return res.status(404).json({ ok: false, error: 'Not found' });

@@ -9,10 +9,10 @@ function authenticate(req) {
   if (qSecret !== expected) throw new Error('invalid secret');
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const rid = req.headers['x-vercel-id'] || Date.now().toString();
   const ok = (data = {}) => res.status(200).json({ ok: true, requestId: rid, ...data });
-  const bad = (code, msg) => res.status(code).json({ ok: false, error: msg, requestId: rid });
+  const bad = (code, msg, extra = {}) => res.status(code).json({ ok: false, error: msg, requestId: rid, ...extra });
 
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     const dateKey = (req.query.date && String(req.query.date).match(/^\d{4}-\d{2}-\d{2}$/))
       ? String(req.query.date)
       : getVietnamDateKey();
-      
+
     // 3. Lấy state
     const state = await getFullDayState(dateKey);
 
