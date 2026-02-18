@@ -541,37 +541,33 @@ async function renderSettings(container) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────
-const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-
-async function tryAutoFillSecret() {
-  if (!IS_LOCAL) return false;
-  try {
-    const res = await fetch('/api/dev-secret');
-    if (!res.ok) return false;
-    const data = await res.json();
-    if (data.ok && data.secret) {
-      API.setSecret(data.secret);
-      console.info('[dev] Secret auto-filled from env ✅');
-      return true;
-    }
-  } catch (_) { /* ignore */ }
-  return false;
-}
-
 async function boot() {
   startClock();
+
+  // Dev-only: try to auto-fill secret from /api/dev-secret
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    if (!API.hasSecret()) {
+      try {
+        const res = await fetch('/api/dev-secret');
+        const data = await res.json();
+        if (data.ok && data.secret) {
+          API.setSecret(data.secret);
+          console.log('🏗️ Dev Mode: PUNCH_SECRET auto-filled from env');
+        }
+      } catch (e) {
+        // Silently fail in dev if endpoint not available
+      }
+    }
+  }
 
   // Nav tab clicks
   $$('.nav-tab').forEach(tab => {
     tab.addEventListener('click', () => navigate(tab.dataset.page));
   });
 
-  // Auth: try auto-fill from env (local dev only), else show modal
+  // Auth check
   if (!API.hasSecret()) {
-    const autoFilled = await tryAutoFillSecret();
-    if (!autoFilled) {
-      await showAuthModal();
-    }
+    await showAuthModal();
   }
 
   // Initial route
