@@ -25,6 +25,13 @@ async function apiFetch(path, options = {}) {
         ...(options.headers || {}),
     };
     const res = await fetch(BASE + path, { ...options, headers });
+    
+    // Check if response is JSON
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+        throw new Error(`Server returned non-JSON response (${res.status})`);
+    }
+    
     const data = await res.json();
     if (!data.ok && res.status === 403) {
         throw new Error('AUTH_FAIL');
@@ -91,4 +98,16 @@ export async function clearOff(date) {
 /** POST /api/mark-wfh-today — trigger immediate WFH punch */
 export async function markWfhToday() {
     return apiPost('/api/mark-wfh-today', {});
+}
+
+/** GET /api/dev-secret — get secret from env (dev only) */
+export async function getDevSecret() {
+    try {
+        const res = await fetch('/api/dev-secret');
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.ok ? data.secret : null;
+    } catch {
+        return null;
+    }
 }

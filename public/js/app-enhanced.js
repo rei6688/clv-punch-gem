@@ -966,18 +966,39 @@ async function boot() {
     // Auto-auth for local development
     if (!API.hasSecret() && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
         try {
-            const d = await fetch('/api/dev-secret').then(r => r.json());
-            if (d.ok) {
-                API.setSecret(d.secret);
+            const secret = await API.getDevSecret();
+            if (secret) {
+                API.setSecret(secret);
+                console.log('✅ Auto-authenticated from .env');
                 onHashChange();
+                return;
             }
-        } catch (e) { }
+        } catch (e) { 
+            console.warn('Dev secret endpoint not available:', e);
+        }
     }
 
     if (!API.hasSecret()) {
         const root = $('#modal-root');
-        root.innerHTML = `<div class="modal-overlay animate-in"><div class="modal-content !max-w-xs text-center space-y-4"><h2 class="text-xl font-black">Authentication</h2><p class="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Enter PUNCH_SECRET to unlock</p><input type="password" id="s-input" class="input text-center" placeholder="••••••••"><button id="s-submit" class="btn btn-primary w-full shadow-lg shadow-primary/20">Unlock Dashboard</button></div></div>`;
-        const submit = async () => { const v = $('#s-input').value; if (!v) return; API.setSecret(v); location.reload(); };
+        root.innerHTML = `<div class="modal-overlay animate-in"><div class="modal-content !max-w-xs text-center space-y-4">
+            <h2 class="text-xl font-black">Authentication</h2>
+            <p class="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Enter PUNCH_SECRET to unlock</p>
+            <input type="password" id="s-input" class="input text-center" placeholder="••••••••" autocomplete="current-password">
+            <button id="s-submit" class="btn btn-primary w-full shadow-lg shadow-primary/20">Unlock Dashboard</button>
+            <p class="text-[9px] text-muted-foreground/60">Local dev: Check .env.local for PUNCH_SECRET</p>
+        </div></div>`;
+        const submit = async () => { 
+            const v = $('#s-input').value; 
+            if (!v) return; 
+            API.setSecret(v); 
+            try {
+                // Test the secret by calling state API
+                await API.getState();
+                location.reload();
+            } catch (e) {
+                alert('Invalid secret: ' + e.message);
+            }
+        };
         $('#s-submit').onclick = submit;
         $('#s-input').onkeydown = e => e.key === 'Enter' && submit();
         return;
