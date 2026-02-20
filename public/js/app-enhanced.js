@@ -761,8 +761,13 @@ async function renderHistory(container) {
 
 async function renderSettings(container) {
     const data = await API.getState();
-    const { schedule, times } = data.config;
-    const telegram = data.config.telegram || { token: '', chatId: '' };
+    const { schedule = {}, times = {} } = data.config || {};
+    const telegram = (data.config && data.config.telegram) || { token: '', chatId: '' };
+    
+    // Set defaults for times if missing
+    const defaultTimes = { am: '08:30', noon: '13:30', pm: '20:00', offsetMin: 60 };
+    const finalTimes = { ...defaultTimes, ...times };
+    const finalSchedule = schedule || { 0: 'off', 1: 'wfh', 2: 'wfh', 3: 'wfh', 4: 'wfh', 5: 'wfh', 6: 'off' };
 
     container.innerHTML = `
         <div class="max-w-3xl mx-auto space-y-8 animate-in pb-20">
@@ -799,10 +804,10 @@ async function renderSettings(container) {
                     <button id="save-times" class="btn btn-primary !py-2 !text-xs font-black">Save Rules</button>
                 </div>
                 <div class="settings-content grid grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">AM Rule</label><input type="time" id="time-am" class="input" value="${times.am || '08:30'}"></div>
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">Mid-Day</label><input type="time" id="time-noon" class="input" value="${times.noon || '13:30'}"></div>
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">PM Rule</label><input type="time" id="time-pm" class="input" value="${times.pm || '20:00'}"></div>
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">Offset (M)</label><input type="number" id="time-offset" class="input" value="${times.offsetMin || 60}"></div>
+                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">AM Rule</label><input type="time" id="time-am" class="input" value="${finalTimes.am}"></div>
+                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">Mid-Day</label><input type="time" id="time-noon" class="input" value="${finalTimes.noon}"></div>
+                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">PM Rule</label><input type="time" id="time-pm" class="input" value="${finalTimes.pm}"></div>
+                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">Offset (M)</label><input type="number" id="time-offset" class="input" value="${finalTimes.offsetMin}"></div>
                 </div>
             </div>
 
@@ -817,7 +822,7 @@ async function renderSettings(container) {
                 </div>
                 <div class="settings-content grid grid-cols-1 gap-1">
                     ${[1, 2, 3, 4, 5, 6, 0].map(day => {
-        const val = schedule[day] || 'wio', label = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][day];
+        const val = finalSchedule[day] || 'wio', label = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][day];
         return `
                         <div class="flex items-center justify-between p-3.5 rounded-xl hover:bg-muted/30 transition-all group">
                             <span class="font-bold text-sm leading-none opacity-80 group-hover:opacity-100">${label}</span>
