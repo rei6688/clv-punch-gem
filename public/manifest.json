@@ -1,0 +1,49 @@
+{
+  "name": "Auto Punch Pro",
+  "short_name": "Auto Punch",
+  "description": "Automated check-in system for Cyberlogitec Blueprint",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#8b5cf6",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👊</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👊</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "View dashboard",
+      "url": "/#dashboard",
+      "icons": []
+    },
+    {
+      "name": "History",
+      "short_name": "History",
+      "description": "View activity history",
+      "url": "/#history",
+      "icons": []
+    },
+    {
+      "name": "Settings",
+      "short_name": "Settings",
+      "description": "Manage settings",
+      "url": "/#settings",
+      "icons": []
+    }
+  ]
+}

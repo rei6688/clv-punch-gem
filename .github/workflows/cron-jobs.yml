@@ -45,10 +45,10 @@ jobs:
     if: github.event.schedule == '5 17 * * *'
     runs-on: ubuntu-latest
     steps:
-      - name: Ping /api/cron-reset
+      - name: Ping /api/crons (reset)
         run: |
           curl --request POST \
-            --url 'https://auto-punch.vercel.app/api/cron-reset' \
+            --url 'https://auto-punch.vercel.app/api/crons?cron=reset' \
             --header 'Authorization: Bearer ${{ secrets.PUNCH_SECRET }}' \
             --header 'Content-Type: application/json' \
             --fail
@@ -59,10 +59,10 @@ jobs:
     if: github.event.schedule != '5 17 * * *'
     runs-on: ubuntu-latest
     steps:
-      - name: Ping /api/cron-reminder
+      - name: Ping /api/crons (reminder)
         run: |
           curl --request POST \
-            --url 'https://auto-punch.vercel.app/api/cron-reminder' \
+            --url 'https://auto-punch.vercel.app/api/crons?cron=reminder' \
             --header 'Authorization: Bearer ${{ secrets.PUNCH_SECRET }}' \
             --header 'Content-Type: application/json' \
             --fail

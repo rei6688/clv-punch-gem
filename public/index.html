@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description" content="Automated check-in system for Cyberlogitec Blueprint" />
+  <meta name="theme-color" content="#8b5cf6" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Auto Punch — Pro Dashboard</title>
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" type="text/css" href="https://npmcdn.com/flatpickr/dist/themes/material_blue.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            border: "hsl(var(--border))",
+            background: "hsl(var(--background))",
+            foreground: "hsl(var(--foreground))",
+            primary: { DEFAULT: "hsl(var(--primary))", foreground: "hsl(var(--primary-foreground))" },
+            muted: { DEFAULT: "hsl(var(--muted))", foreground: "hsl(var(--muted-foreground))" },
+            success: "hsl(var(--success))",
+          }
+        }
+      }
+    }
+  </script>
+
+  <style type="text/tailwindcss">
+    @layer base {
+      body { @apply bg-background text-foreground antialiased font-sans flex flex-col min-h-screen; }
+    }
+  </style>
+
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👊</text></svg>" />
+</head>
+
+<body>
+
+  <!-- Status Guide Bar -->
+  <div id="status-bar-container"></div>
+
+  <!-- App Header -->
+  <header>
+    <div class="container">
+      <div class="header-inner">
+        <div class="flex items-center gap-8">
+          <a href="#dashboard" class="flex items-center gap-3">
+            <span class="text-2xl">👊</span>
+            <span class="font-bold tracking-tight text-lg">Auto Punch</span>
+          </a>
+          <nav class="flex items-center gap-2">
+            <button class="nav-tab active" data-page="dashboard">Dashboard</button>
+            <button class="nav-tab" data-page="history">History</button>
+            <button class="nav-tab" data-page="settings">Settings</button>
+          </nav>
+        </div>
+        <div class="flex items-center gap-4">
+          <div id="nav-clock" class="text-xs font-mono text-muted-foreground tabular-nums">--:--:-- VN</div>
+          <button id="theme-toggle" class="p-2 hover:bg-muted rounded-full transition-colors" title="Toggle Theme">
+            <i data-lucide="sun" class="w-4 h-4 text-orange-500 block dark:hidden"></i>
+            <i data-lucide="moon" class="w-4 h-4 text-indigo-400 hidden dark:block"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main View Area -->
+  <main id="app" class="flex-1 container py-10">
+    <div class="flex flex-col items-center justify-center py-32 gap-4">
+      <div class="spinner"></div>
+      <p class="text-sm font-medium text-muted-foreground tracking-widest uppercase animate-pulse">Initializing System
+      </p>
+    </div>
+  </main>
+
+  <!-- Modals & Containers -->
+  <div id="modal-root"></div>
+  <div id="toast-container"></div>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script type="module" src="/js/app-enhanced.js"></script>
+
+  <!-- Mobile Bottom Navigation -->
+  <nav class="mobile-nav">
+    <a href="#dashboard" class="mobile-nav-item active" data-page="dashboard">
+      <i data-lucide="layout-dashboard" class="mobile-nav-icon"></i>
+      <span class="mobile-nav-label">Dashboard</span>
+    </a>
+    <a href="#history" class="mobile-nav-item" data-page="history">
+      <i data-lucide="history" class="mobile-nav-icon"></i>
+      <span class="mobile-nav-label">History</span>
+    </a>
+    <a href="#settings" class="mobile-nav-item" data-page="settings">
+      <i data-lucide="settings" class="mobile-nav-icon"></i>
+      <span class="mobile-nav-label">Settings</span>
+    </a>
+  </nav>
+
+</body>
+
+</html>
