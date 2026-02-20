@@ -180,7 +180,7 @@ async function handler(req, res) {
 function listenWithFallback(server, port, maxAttempts) {
   return new Promise((resolve, reject) => {
     const attempt = (currentPort, attemptsLeft) => {
-      server.listen(currentPort, () => resolve(currentPort));
+      server.listen(currentPort, () => resolve(server.address().port));
       server.once('error', (error) => {
         if (error.code === 'EADDRINUSE' && attemptsLeft > 0) {
           server.close(() => attempt(currentPort + 1, attemptsLeft - 1));
@@ -193,7 +193,7 @@ function listenWithFallback(server, port, maxAttempts) {
   });
 }
 
-const port = Number(process.env.PORT || 3000);
+const port = Number(process.env.PORT || 0);
 const server = http.createServer(handler);
 
 listenWithFallback(server, port, 10)
