@@ -8,7 +8,9 @@ module.exports = async function handler(req, res) {
   if (typeof body === 'string') try { body = JSON.parse(body); } catch { body = {}; }
 
   const { username, password } = body || {};
+  console.log('[register] attempt:', { username, hasPassword: !!password, bodyType: typeof req.body });
   const result = await register(username, password);
+  console.log('[register] result:', { ok: result.ok, hasToken: !!result.token, error: result.error });
   if (!result.ok) return res.status(400).json(result);
-  return res.status(200).json({ ok: true });
+  return res.status(200).json({ ok: true, token: result.token });
 };
