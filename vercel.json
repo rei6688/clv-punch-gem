@@ -1,5 +1,6 @@
 {
     "version": 2,
+    "devCommand": "node server/dev.js",
     "routes": [
         {
             "src": "/api/(.*)",

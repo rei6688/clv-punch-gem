@@ -23,16 +23,25 @@ module.exports = async function handler(req, res) {
     // 1. Xác thực (an toàn hơn cho debug)
     authenticate(req);
 
-    // 2. Lấy ngày
+    // 2. Bulk mode: ?dates=2026-02-23,2026-02-24,...
+    if (req.query.dates) {
+      const dateList = String(req.query.dates).split(',').filter(d => d.match(/^\d{4}-\d{2}-\d{2}$/)).slice(0, 30);
+      const results = await Promise.all(dateList.map(d => getFullDayState(d)));
+      const byDate = {};
+      results.forEach(s => { byDate[s.date] = { effectiveMode: s.day.effectiveMode, modeOverride: s.day.modeOverride, scheduleMode: s.day.scheduleMode, isOff: s.day.isOff }; });
+      return ok({ byDate });
+    }
+
+    // 3. Lấy ngày đơn
     // (Nếu không cung cấp date, dùng ngày VN hiện tại)
     const dateKey = (req.query.date && String(req.query.date).match(/^\d{4}-\d{2}-\d{2}$/))
       ? String(req.query.date)
       : getVietnamDateKey();
 
-    // 3. Lấy state
+    // 4. Lấy state
     const state = await getFullDayState(dateKey);
 
-    // 4. Trả về
+    // 5. Trả về
     if (req.query.pretty) {
       res.setHeader('Content-Type', 'application/json');
       return res.status(200).send(JSON.stringify({ ok: true, requestId: rid, ...state }, null, 2));

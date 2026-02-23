@@ -4,10 +4,11 @@
   "description": "Automated check-in system for Cyberlogitec Blueprint.",
   "main": "index.js",
   "scripts": {
-    "dev": "vercel dev",
-    "dev:local": "npx vercel dev",
+    "dev": "node server/dev.js",
+    "dev:local": "node server/dev.js",
+    "dev:vercel": "npx vercel dev",
     "dev:api": "npx vercel dev --yes",
-    "start": "vercel dev",
+    "start": "node server/dev.js",
     "test": "npx playwright test",
     "serve": "python3 -m http.server 3000 --directory public"
   },
@@ -23,7 +24,8 @@
     "@types/node": "^20.10.4",
     "autoprefixer": "^10.4.24",
     "postcss": "^8.5.6",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "vercel": "^50.22.0"
   },
   "dependencies": {
     "@octokit/rest": "^20.1.0",

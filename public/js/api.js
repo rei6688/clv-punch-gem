@@ -62,6 +62,11 @@ export async function getState(date) {
     return apiFetch(`/api/state${q}`, { method: 'GET' });
 }
 
+/** GET /api/state?dates= — bulk effective modes for multiple dates */
+export async function getBulkState(dates) {
+    return apiGet(`/api/state?dates=${dates.join(',')}`);
+}
+
 /** GET /api/history — last N days */
 export async function getHistory(days = 30) {
     return apiGet(`/api/history?days=${days}`);
@@ -98,6 +103,21 @@ export async function clearOff(date) {
 /** POST /api/actions — trigger immediate WFH punch */
 export async function markWfhToday() {
     return apiPost('/api/actions', { action: 'markWfhToday' });
+}
+
+/** POST /api/actions — swap a specific date between wfh and wio mode */
+export async function swapDay(date, toMode) {
+    return apiPost('/api/actions', { action: 'swapDay', date, toMode });
+}
+
+/** POST /api/actions — update weekly schedule */
+export async function updateSchedule(schedule) {
+    return apiPost('/api/updates', { type: 'updateSchedule', schedule });
+}
+
+/** POST /api/updates — update settings (telegram/times) */
+export async function updateSettings(settings) {
+    return apiPost('/api/updates', { type: 'updateSettings', ...settings });
 }
 
 /** GET /api/dev-secret — get secret from env (dev only) */

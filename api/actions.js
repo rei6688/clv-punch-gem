@@ -1,7 +1,7 @@
 // Consolidated API: mark-done, mark-off, mark-wfh-today, clear-off
 // Routes by 'action' query parameter or body field
 
-const { setPeriodState, setIsOff, setIsOffRange } = require('../lib/kv');
+const { setPeriodState, setIsOff, setIsOffRange, setDayModeOverride } = require('../lib/kv');
 const { sendChat } = require('../lib/chat');
 const { getVietnamDateKey, getCurrentPeriod } = require('../lib/time');
 const { kv } = require('@vercel/kv');
@@ -125,6 +125,50 @@ const handlers = {
     return ok({ triggered: true, override_set: true });
   },
 
+  async swapDay(req, res, rid) {
+    const ok = (data = {}) => res.status(200).json({ ok: true, requestId: rid, ...data });
+    const bad = (code, msg) => res.status(code).json({ ok: false, error: msg, requestId: rid });
+
+    const { date, toMode } = req.body;
+    if (!date || !String(date).match(/^\d{4}-\d{2}-\d{2}$/)) return bad(400, 'invalid or missing date');
+    if (toMode !== 'wfh' && toMode !== 'wio') return bad(400, 'toMode must be wfh or wio');
+
+    const dateKey = date;
+    const todayKey = getVietnamDateKey();
+
+    // Lưu override
+    await setDayModeOverride(dateKey, toMode);
+
+    if (toMode === 'wfh') {
+      // WIO → WFH: nếu là ngày hôm nay thì kích hoạt GHA luôn
+      let autoTriggered = false;
+      if (dateKey === todayKey) {
+        try {
+          await triggerGitHubWorkflow();
+          autoTriggered = true;
+        } catch (ghaErr) {
+          console.warn('[swapDay] GHA trigger skipped:', ghaErr.message);
+        }
+      }
+      await sendChat({
+        title: `🔄 Đổi ${dateKey}: WIO → WFH`,
+        message: dateKey === todayKey
+          ? `Ngày hôm nay (${dateKey}) đã chuyển sang WFH. GHA sẽ tự động Punch.`
+          : `Ngày ${dateKey} đã chuyển sang WFH. Hệ thống sẽ tự Punch ngày đó.`,
+        icon: 'info',
+      });
+      return ok({ date: dateKey, toMode, autoTriggered });
+    } else {
+      // WFH → WIO: chỉ nhắc nhở, không tự punch
+      await sendChat({
+        title: `🔄 Đổi ${dateKey}: WFH → WIO (Văn phòng)`,
+        message: `Ngày ${dateKey} chuyển sang vào VP. Nhớ tự check in thủ công nhé!`,
+        icon: 'config',
+      });
+      return ok({ date: dateKey, toMode, reminder: true });
+    }
+  },
+
   async clearOff(req, res, rid) {
     const ok = (data = {}) => res.status(200).json({ ok: true, requestId: rid, ...data });
     const bad = (code, msg) => res.status(code).json({ ok: false, error: msg, requestId: rid });
@@ -170,7 +214,7 @@ module.exports = async function handler(req, res) {
     const handler = handlers[action];
 
     if (!handler) {
-      return bad(400, `unknown action: ${action}. Valid actions: markDone, markOff, markWfhToday, clearOff`);
+      return bad(400, `unknown action: ${action}. Valid actions: markDone, markOff, markWfhToday, clearOff, swapDay`);
     }
 
     return await handler(req, res, rid);

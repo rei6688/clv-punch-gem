@@ -71,29 +71,71 @@ function showSkeleton(container) {
 function renderStatusGuide(data) {
     const container = $('#status-bar-container');
     if (!container) return;
-    const { config, day, date } = data;
+    const { config, day, date, periods } = data;
     const isEnabled = config.isEnabled;
-    const schedule = config.schedule || {};
-    const dayIdx = new Date(date + 'T00:00:00+07:00').getDay();
-    const dayType = schedule[dayIdx] || 'wio';
+    const times = config.times || { am: '08:30', pm: '20:00' };
+    const p = periods || {};
+    const amStatus = p.am ? p.am.status : 'pending';
+    const pmStatus = p.pm ? p.pm.status : 'pending';
+
+    // Use server-computed effectiveMode (override > schedule) — most reliable
+    const dayType = day.effectiveMode || day.modeOverride || (() => {
+        const schedule = config.schedule || {};
+        const dayIdx = new Date(date + 'T00:00:00+07:00').getDay();
+        return schedule[String(dayIdx)] || schedule[dayIdx] || 'wio';
+    })();
+    const isSwapped = !!day.modeOverride && day.modeOverride !== day.scheduleMode;
+
+    let modeIcon, modeLabel, modeBg;
+    if (day.isOff) {
+        modeIcon = 'umbrella'; modeLabel = 'Vacation'; modeBg = 'bg-orange-500/10 text-orange-600';
+    } else if (dayType === 'wfh') {
+        modeIcon = 'laptop';
+        modeLabel = isSwapped ? 'WFH — Auto Punch 🔄' : 'WFH — Auto Punch';
+        modeBg = 'bg-primary/10 text-primary';
+    } else {
+        modeIcon = 'building-2';
+        modeLabel = isSwapped ? 'Văn Phòng — Check-in thủ công 🔄' : 'Văn Phòng — Check-in thủ công';
+        modeBg = 'bg-muted text-muted-foreground';
+    }
+
+    const autoRun = isEnabled && !day.isOff && dayType === 'wfh';
+    const punchIcon = (st) => {
+        if (st === 'success' || st === 'manual_done') return `<i data-lucide="check-circle" class="w-3 h-3 text-green-500"></i>`;
+        if (st === 'fail') return `<i data-lucide="x-circle" class="w-3 h-3 text-red-500"></i>`;
+        return `<i data-lucide="clock" class="w-3 h-3 text-muted-foreground/40"></i>`;
+    };
 
     container.innerHTML = `
         <div class="status-bar">
-            <div class="container flex items-center justify-between">
-                <div class="flex items-center gap-4">
-                    <div class="flex items-center gap-1.5">
-                        <div class="w-2 h-2 rounded-full ${isEnabled ? 'bg-green-500 animate-pulse' : 'bg-red-500'}"></div>
-                        <span class="font-bold uppercase tracking-tight ${isEnabled ? 'text-primary' : 'text-red-500'}">${isEnabled ? 'Active' : 'Paused'}</span>
+            <div class="container flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <div class="w-1.5 h-1.5 rounded-full ${isEnabled ? 'bg-green-500 animate-pulse' : 'bg-red-500'}"></div>
+                        <span class="font-black uppercase tracking-tight text-[11px] ${isEnabled ? 'text-primary' : 'text-red-500'}">${isEnabled ? 'Active' : 'Paused'}</span>
                     </div>
-                    <span class="opacity-30">|</span>
-                    <span class="text-muted-foreground uppercase font-black text-[10px] tracking-widest">${day.isOff ? '🌴 Vacation Mode' : `${dayType} mode`}</span>
+                    <span class="opacity-20">|</span>
+                    <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full ${modeBg} shrink-0">
+                        <i data-lucide="${modeIcon}" class="w-3 h-3"></i>
+                        <span class="text-[10px] font-black uppercase tracking-wider">${modeLabel}</span>
+                    </div>
+                    <span class="opacity-20 hidden sm:block">|</span>
+                    <div class="hidden sm:flex items-center gap-3 text-[10px] font-bold text-muted-foreground">
+                        <div class="flex items-center gap-1">${punchIcon(amStatus)}<span>AM ${amStatus === 'pending' ? times.am : (p.am && p.am.recordedPunchTime) || '✓'}</span></div>
+                        <div class="flex items-center gap-1">${punchIcon(pmStatus)}<span>PM ${pmStatus === 'pending' ? times.pm : (p.pm && p.pm.recordedPunchTime) || '✓'}</span></div>
+                        <div class="flex items-center gap-1">
+                            <i data-lucide="${autoRun ? 'zap' : 'hand'}" class="w-3 h-3 ${autoRun ? 'text-primary' : 'text-muted-foreground/60'}"></i>
+                            <span>${autoRun ? 'Auto' : 'Manual'}</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="flex items-center gap-4 text-muted-foreground/60 font-mono text-[10px]">
-                    <span>${date}</span>
-                    <span class="hidden sm:block">v4.3.0 stable</span>
+                <div class="flex items-center gap-3 text-muted-foreground/60 font-mono text-[10px] shrink-0">
+                    <span class="hidden md:block">${date}</span>
+                    <span class="hidden lg:block">v4.4.0</span>
                 </div>
             </div>
         </div>`;
+    lucide.createIcons({ nodes: [container] });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -107,7 +149,7 @@ function showMarkOffModal(dateHint = Utils.todayVN()) {
             <div class="modal-content scale-in-95 animate-in">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
-                        <i data-lucide="palm-tree" class="w-5 h-5 text-orange-500"></i>
+                        <span class="text-2xl">🌴</span>
                         <h2 class="text-xl font-black">Set Vacation</h2>
                     </div>
                     <button class="modal-close p-1 hover:bg-muted rounded-full transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
@@ -207,6 +249,245 @@ function showMarkOffModal(dateHint = Utils.todayVN()) {
 }
 
 // ══════════════════════════════════════════════════════════════
+// Swap Day Modal
+// ══════════════════════════════════════════════════════════════
+
+function showSwapDayModal(schedule = {}) {
+    const root = $('#modal-root');
+
+    // Build next 14 days — includes weekends
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() + i);
+        const iso = d.toLocaleDateString('en-CA');
+        const dayIdx = d.getDay();
+        const isWeekend = dayIdx === 0 || dayIdx === 6;
+        const baseMode = schedule[String(dayIdx)] || schedule[dayIdx] || 'wio';
+        // effectiveMode will be patched after bulk fetch; starts as baseMode
+        days.push({ iso, dayIdx, isWeekend, baseMode, effectiveMode: baseMode, label: d.toLocaleDateString('vi-VN', { weekday: 'short' }), num: d.getDate(), month: d.getMonth() + 1 });
+    }
+
+    // pendingSwaps: { [iso]: toMode }
+    let pendingSwaps = {};
+    let weekendPicking = null; // iso of weekend day currently showing picker
+
+    const modeBadge = (mode) => {
+        if (mode === 'wfh') return `<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">WFH</span>`;
+        if (mode === 'off') return `<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-orange-500/10 text-orange-500">OFF</span>`;
+        return `<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">VP</span>`;
+    };
+
+    const renderBtn = (d, i) => {
+        const isWeekendOff = d.isWeekend && d.baseMode === 'off';
+        const isBlockedWeekday = !d.isWeekend && d.baseMode === 'off';
+        const selected = !!pendingSwaps[d.iso];
+        const toMode = pendingSwaps[d.iso];
+        const isToday = i === 0;
+        const hasOverride = d.effectiveMode !== d.baseMode;
+
+        let borderCls, bgCls;
+        if (selected) { borderCls = 'border-primary'; bgCls = 'bg-primary/5 shadow-sm shadow-primary/10'; }
+        else if (isBlockedWeekday) { borderCls = 'border-transparent'; bgCls = 'bg-muted/20 opacity-30 cursor-not-allowed'; }
+        else if (isWeekendOff) { borderCls = 'border-dashed border-orange-300/60'; bgCls = 'bg-orange-500/5 hover:border-orange-400/60 hover:bg-orange-500/10'; }
+        else { borderCls = `border-transparent ${hasOverride ? 'ring-1 ring-primary/30' : ''}`; bgCls = 'bg-muted/40 hover:border-primary/30 hover:bg-muted/60'; }
+
+        const todayDot = isToday ? `<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-primary border-2 border-background"></span>` : '';
+        const swapDot = (!selected && hasOverride) ? `<span class="absolute top-0.5 left-0.5 w-1.5 h-1.5 rounded-full bg-primary/60"></span>` : '';
+        const icon = selected
+            ? `<i data-lucide="check" class="w-2.5 h-2.5 text-primary mt-0.5"></i>`
+            : isWeekendOff
+            ? `<i data-lucide="plus" class="w-2.5 h-2.5 text-orange-400 mt-0.5"></i>`
+            : `<span class="h-3"></span>`;
+
+        // Show effectiveMode as current badge (reflects KV override)
+        const displayMode = (isWeekendOff && !hasOverride) ? 'off' : d.effectiveMode;
+        return `<button class="swap-day-btn relative flex flex-col items-center gap-0.5 p-2 rounded-xl border-2 transition-all ${borderCls} ${bgCls}" data-idx="${i}" ${isBlockedWeekday ? 'disabled' : ''}>
+            ${todayDot}${swapDot}
+            <span class="text-[8px] font-black uppercase ${d.isWeekend ? 'text-orange-400' : 'opacity-40'}">${d.label}</span>
+            <span class="text-sm font-black leading-none">${d.num}</span>
+            ${selected ? modeBadge(toMode) : modeBadge(displayMode)}
+            ${icon}
+        </button>`;
+    };
+
+    const buildSummary = () => {
+        const keys = Object.keys(pendingSwaps);
+        if (!keys.length) return `<p class="text-[11px] text-muted-foreground text-center py-1">Chọn ngày để đổi chế độ</p>`;
+        return keys.map(iso => {
+            const d = days.find(x => x.iso === iso);
+            const toMode = pendingSwaps[iso];
+            // fromMode = current effectiveMode (reflects existing KV override)
+            const fromMode = d.effectiveMode;
+            return `<div class="flex items-center justify-between text-[11px] py-1.5 border-b border-border/50 last:border-0">
+                <span class="font-bold">${d.label} ${d.num}/${d.month}</span>
+                <div class="flex items-center gap-2">
+                    ${modeBadge(fromMode)}
+                    <i data-lucide="arrow-right" class="w-3 h-3 opacity-30"></i>
+                    ${modeBadge(toMode)}
+                </div>
+            </div>`;
+        }).join('');
+    };
+
+    root.innerHTML = `
+        <div class="modal-overlay animate-in">
+            <div class="modal-content scale-in-95 animate-in max-w-md">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                            <i data-lucide="arrow-left-right" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-black leading-none">Swap Work Mode</h2>
+                            <p class="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-0.5">Chọn nhiều ngày cùng lúc</p>
+                        </div>
+                    </div>
+                    <button class="modal-close p-1 hover:bg-muted rounded-full transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
+                </div>
+
+                <!-- Day Grid: 2 rows × 7 -->
+                <div id="swap-day-grid" class="grid grid-cols-7 gap-1"></div>
+
+                <!-- Weekend VP/WFH picker -->
+                <div id="weekend-picker" class="hidden p-3 rounded-xl bg-orange-500/5 border border-orange-200/40 space-y-2">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-orange-500">Làm bù cuối tuần — chọn chế độ</p>
+                    <div class="flex gap-2">
+                        <button id="weekend-pick-wio" class="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 border-transparent bg-muted/60 hover:border-foreground/30 transition-all text-[11px] font-black">
+                            <i data-lucide="building-2" class="w-4 h-4 text-muted-foreground"></i> Lên Văn Phòng
+                        </button>
+                        <button id="weekend-pick-wfh" class="flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl border-2 border-transparent bg-primary/10 hover:border-primary/40 transition-all text-[11px] font-black text-primary">
+                            <i data-lucide="laptop" class="w-4 h-4"></i> WFH (Auto Punch)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Summary list -->
+                <div id="swap-summary" class="min-h-[44px] px-1"></div>
+
+                <div id="swap-warning" class="hidden p-3 rounded-xl bg-orange-500/5 text-orange-600 flex gap-2 text-[11px] font-medium">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 mt-0.5"></i>
+                    <span>Một số ngày đổi về VP — nhớ check-in thủ công!</span>
+                </div>
+
+                <div class="flex gap-2">
+                    <button class="modal-close btn btn-outline flex-1 h-10 font-black">Hủy</button>
+                    <button id="swap-confirm" class="btn btn-primary flex-[2] h-10 font-black" disabled>Xác nhận đổi</button>
+                </div>
+            </div>
+        </div>`;
+    lucide.createIcons();
+
+    const rerender = () => {
+        const grid = $('#swap-day-grid');
+        grid.innerHTML = days.map((d, i) => renderBtn(d, i)).join('');
+        lucide.createIcons({ nodes: [grid] });
+        attachGridListeners();
+
+        const keys = Object.keys(pendingSwaps);
+        $('#swap-confirm').disabled = keys.length === 0;
+        const summary = $('#swap-summary');
+        summary.innerHTML = buildSummary();
+        lucide.createIcons({ nodes: [summary] });
+
+        const hasWio = keys.some(iso => pendingSwaps[iso] === 'wio');
+        $('#swap-warning').classList.toggle('hidden', !hasWio);
+    };
+
+    const showWeekendPicker = (iso) => {
+        weekendPicking = iso;
+        const picker = $('#weekend-picker');
+        picker.classList.remove('hidden');
+        lucide.createIcons({ nodes: [picker] });
+        $('#weekend-pick-wio').onclick = () => {
+            pendingSwaps[iso] = 'wio';
+            weekendPicking = null;
+            picker.classList.add('hidden');
+            rerender();
+        };
+        $('#weekend-pick-wfh').onclick = () => {
+            pendingSwaps[iso] = 'wfh';
+            weekendPicking = null;
+            picker.classList.add('hidden');
+            rerender();
+        };
+    };
+
+    const attachGridListeners = () => {
+        $$('.swap-day-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const i = parseInt(btn.dataset.idx);
+                const d = days[i];
+                if (btn.disabled) return;
+
+                if (pendingSwaps[d.iso]) {
+                    // Deselect
+                    delete pendingSwaps[d.iso];
+                    if (weekendPicking === d.iso) {
+                        weekendPicking = null;
+                        $('#weekend-picker').classList.add('hidden');
+                    }
+                    rerender();
+                    return;
+                }
+
+                if (d.isWeekend && d.baseMode === 'off') {
+                    showWeekendPicker(d.iso);
+                } else {
+                    // Toggle from effectiveMode (respects existing KV override)
+                    pendingSwaps[d.iso] = d.effectiveMode === 'wfh' ? 'wio' : 'wfh';
+                    rerender();
+                }
+            });
+        });
+    };
+
+    rerender();
+
+    // Async-load KV overrides for all 14 days, patch effectiveMode, re-render
+    (async () => {
+        try {
+            const res = await API.getBulkState(days.map(d => d.iso));
+            if (res.byDate) {
+                days.forEach(d => {
+                    const s = res.byDate[d.iso];
+                    if (s) {
+                        d.effectiveMode = s.effectiveMode || d.baseMode;
+                        d.modeOverride = s.modeOverride || null;
+                    }
+                });
+                rerender();
+            }
+        } catch (e) { /* silently ignore — schedule-based fallback already rendered */ }
+    })();
+
+    const close = () => root.innerHTML = '';
+    $$('.modal-close').forEach(b => b.onclick = close);
+
+    $('#swap-confirm').onclick = async () => {
+        const btn = $('#swap-confirm');
+        btn.disabled = true;
+        btn.textContent = 'Đang xử lý...';
+        try {
+            const entries = Object.entries(pendingSwaps);
+            await Promise.all(entries.map(([date, toMode]) => API.swapDay(date, toMode)));
+            const wfhCount = entries.filter(([, m]) => m === 'wfh').length;
+            const wioCount = entries.filter(([, m]) => m === 'wio').length;
+            const parts = [];
+            if (wfhCount) parts.push(`${wfhCount} ngày → WFH`);
+            if (wioCount) parts.push(`${wioCount} ngày → VP`);
+            toast('🔄 ' + parts.join(', '), 'success');
+            close();
+            onHashChange();
+        } catch (e) {
+            toast(e.message || 'Có lỗi xảy ra', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Xác nhận đổi';
+        }
+    };
+}
+
+// ══════════════════════════════════════════════════════════════
 // Dashboard Page - ENHANCED
 // ══════════════════════════════════════════════════════════════
 
@@ -290,88 +571,76 @@ async function renderDashboard(container) {
                 ${Charts.renderStatCard('clock', 'Late Punches', monthlyStats.latePunches, 'This month', 'info')}
             </div>
 
+            <!-- Quick Actions -->
+            <div class="space-y-3">
+                <h3 class="text-sm font-black uppercase tracking-widest text-muted-foreground/40 px-1">Actions</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <button id="qa-wfh" class="btn btn-primary h-20 flex-col !gap-1.5 shadow-lg hover:-translate-y-1 transition-transform">
+                        <i data-lucide="rocket" class="w-6 h-6"></i>
+                        <span class="text-[9px] font-black uppercase tracking-wide">Punch Now</span>
+                    </button>
+                    <button id="qa-swap-day" class="btn btn-outline h-20 flex-col !gap-1.5 hover:-translate-y-1 transition-all hover:border-primary/50 group">
+                        <i data-lucide="arrow-left-right" class="w-6 h-6 text-primary opacity-60 group-hover:opacity-100"></i>
+                        <span class="text-[9px] font-black uppercase tracking-wide">Swap Day</span>
+                    </button>
+                    <button id="qa-range-off" class="btn btn-outline h-20 flex-col !gap-1.5 border-dashed hover:border-solid hover:-translate-y-1 transition-all group">
+                        <i data-lucide="umbrella" class="w-6 h-6 text-orange-400 opacity-60 group-hover:opacity-100"></i>
+                        <span class="text-[9px] font-black uppercase tracking-wide">Vacation</span>
+                    </button>
+                    <button id="qa-mark-am" class="btn btn-outline h-20 flex-col !gap-1.5 hover:-translate-y-1 transition-transform group">
+                        <i data-lucide="sun" class="w-6 h-6 text-orange-400 opacity-60 group-hover:opacity-100"></i>
+                        <span class="text-[9px] font-black uppercase tracking-wide">Skip AM</span>
+                    </button>
+                    <button id="qa-mark-pm" class="btn btn-outline h-20 flex-col !gap-1.5 hover:-translate-y-1 transition-transform group">
+                        <i data-lucide="moon" class="w-6 h-6 text-indigo-400 opacity-60 group-hover:opacity-100"></i>
+                        <span class="text-[9px] font-black uppercase tracking-wide">Skip PM</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Activity Grid -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- AM/PM Status -->
-                <div class="space-y-4">
-                    <h3 class="text-sm font-black uppercase tracking-widest text-muted-foreground/40 px-1">Today's Sessions</h3>
-                    <div class="space-y-3">
-                        <div class="card card-hover flex flex-col gap-6">
-                            <div class="flex justify-between items-start">
-                                <div class="flex items-center gap-3">
-                                    <div class="p-2.5 rounded-xl bg-orange-400/10 text-orange-500"><i data-lucide="sun" class="w-5 h-5"></i></div>
-                                    <div>
-                                        <p class="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none mb-1">Morning Activity</p>
-                                        <p class="text-xs font-bold text-muted-foreground/60">${times.am} - ${times.noon}</p>
-                                    </div>
-                                </div>
-                                ${statusBadge(periods.am.status)}
-                            </div>
-                            <div class="flex items-center justify-between">
-                                <span class="text-xs font-mono font-bold opacity-30">${periods.am.recordedPunchTime || '--:--'}</span>
-                                ${periods.am.imageUrl ? `<button class="btn btn-outline !py-1 !px-3 !text-[10px]" onclick="openLightbox('${periods.am.imageUrl}')">Review</button>` : ''}
-                            </div>
+            <div class="card !p-0 overflow-hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-border">
+                    <!-- AM Session -->
+                    <div class="p-5 flex items-center gap-4">
+                        <div class="p-3 rounded-xl bg-orange-400/10 text-orange-500 shrink-0"><i data-lucide="sun" class="w-5 h-5"></i></div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none">Morning</p>
+                            <p class="text-[10px] text-muted-foreground/60 font-bold mt-0.5">${times.am} – ${times.noon}</p>
                         </div>
-                        
-                        <div class="card card-hover flex flex-col gap-6">
-                            <div class="flex justify-between items-start">
-                                <div class="flex items-center gap-3">
-                                    <div class="p-2.5 rounded-xl bg-indigo-400/10 text-indigo-500"><i data-lucide="moon" class="w-5 h-5"></i></div>
-                                    <div>
-                                        <p class="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none mb-1">Evening Activity</p>
-                                        <p class="text-xs font-bold text-muted-foreground/60">${times.noon} - 17:30</p>
-                                    </div>
-                                </div>
-                                ${statusBadge(periods.pm.status)}
-                            </div>
-                            <div class="flex items-center justify-between">
-                                <span class="text-xs font-mono font-bold opacity-30">${periods.pm.recordedPunchTime || '--:--'}</span>
-                                ${periods.pm.imageUrl ? `<button class="btn btn-outline !py-1 !px-3 !text-[10px]" onclick="openLightbox('${periods.pm.imageUrl}')">Review</button>` : ''}
-                            </div>
+                        <div class="flex flex-col items-end gap-1.5">
+                            ${statusBadge(periods.am.status)}
+                            <span class="text-xs font-mono font-bold opacity-30">${periods.am.recordedPunchTime || '--:--'}</span>
+                            ${periods.am.imageUrl ? `<button class="text-[9px] font-black text-primary hover:underline" onclick="openLightbox('${periods.am.imageUrl}')">Review</button>` : ''}
                         </div>
                     </div>
-                </div>
-
-                <!-- Mini Calendar & Weekly Activity -->
-                <div class="space-y-4">
-                    <h3 class="text-sm font-black uppercase tracking-widest text-muted-foreground/40 px-1">Activity Overview</h3>
-                    <div class="card">
+                    <!-- PM Session -->
+                    <div class="p-5 flex items-center gap-4">
+                        <div class="p-3 rounded-xl bg-indigo-400/10 text-indigo-500 shrink-0"><i data-lucide="moon" class="w-5 h-5"></i></div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none">Evening</p>
+                            <p class="text-[10px] text-muted-foreground/60 font-bold mt-0.5">${times.noon} – 17:30</p>
+                        </div>
+                        <div class="flex flex-col items-end gap-1.5">
+                            ${statusBadge(periods.pm.status)}
+                            <span class="text-xs font-mono font-bold opacity-30">${periods.pm.recordedPunchTime || '--:--'}</span>
+                            ${periods.pm.imageUrl ? `<button class="text-[9px] font-black text-primary hover:underline" onclick="openLightbox('${periods.pm.imageUrl}')">Review</button>` : ''}
+                        </div>
+                    </div>
+                    <!-- Calendar inline -->
+                    <div class="p-5">
                         ${Charts.renderWeeklyActivity(records)}
                     </div>
-                    <div id="mini-calendar-container">
+                </div>
+                <!-- Mini calendar + recent activity below -->
+                <div class="border-t border-border grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border">
+                    <div id="mini-calendar-container" class="p-1">
                         ${Charts.renderMiniCalendar(records, date)}
                     </div>
-                </div>
-            </div>
-
-            <!-- Quick Actions -->
-            <div class="space-y-4">
-                <h3 class="text-sm font-black uppercase tracking-widest text-muted-foreground/40 px-1">Quick Actions</h3>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <button id="qa-wfh" class="btn btn-primary h-24 flex-col !gap-2 shadow-xl hover:-translate-y-1">
-                        <i data-lucide="rocket" class="w-7 h-7"></i>
-                        <span class="text-[10px] font-black uppercase tracking-widest">Punch Now</span>
-                    </button>
-                    <button id="qa-range-off" class="btn btn-outline h-24 flex-col !gap-2 border-dashed hover:border-solid hover:-translate-y-1 group">
-                        <i data-lucide="palm-tree" class="w-7 h-7 text-orange-500 group-hover:scale-110 transition-transform"></i>
-                        <span class="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Set Vacation</span>
-                    </button>
-                    <button id="qa-mark-am" class="btn btn-outline h-24 flex-col !gap-2 hover:-translate-y-1 group">
-                        <i data-lucide="sun" class="w-7 h-7 text-orange-400 opacity-60 group-hover:opacity-100"></i>
-                        <span class="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Skip AM</span>
-                    </button>
-                    <button id="qa-mark-pm" class="btn btn-outline h-24 flex-col !gap-2 hover:-translate-y-1 group">
-                        <i data-lucide="moon" class="w-7 h-7 text-indigo-400 opacity-60 group-hover:opacity-100"></i>
-                        <span class="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Skip PM</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Recent Activity Feed -->
-            <div class="space-y-4">
-                <h3 class="text-sm font-black uppercase tracking-widest text-muted-foreground/40 px-1">Recent Activity</h3>
-                <div class="card">
-                    <div class="activity-feed" id="recent-activity"></div>
+                    <div class="p-5">
+                        <p class="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Recent Activity</p>
+                        <div class="activity-feed" id="recent-activity"></div>
+                    </div>
                 </div>
             </div>
         </div>`;
@@ -396,6 +665,7 @@ async function renderDashboard(container) {
             catch (err) { toast(err.message, 'error'); e.target.checked = !e.target.checked; }
         };
         $('#qa-range-off').onclick = () => showMarkOffModal(date);
+        $('#qa-swap-day').onclick = () => showSwapDayModal(schedule);
         $('#qa-wfh').onclick = async () => { try { await API.markWfhToday(); toast('GHA Triggered', 'success'); } catch (e) { toast(e.message, 'error'); } };
         $('#qa-mark-am').onclick = async () => { await API.markDone('am', date); toast('AM Marked Done', 'success'); onHashChange(); };
         $('#qa-mark-pm').onclick = async () => { await API.markDone('pm', date); toast('PM Marked Done', 'success'); onHashChange(); };
@@ -761,7 +1031,10 @@ async function renderHistory(container) {
 
 async function renderSettings(container) {
     const data = await API.getState();
-    const { schedule, telegram, times } = data.config;
+    const cfg = (data && data.config) || {};
+    const telegram = (cfg.telegram && typeof cfg.telegram === 'object') ? cfg.telegram : { token: '', chatId: '' };
+    const finalTimes = { am: '08:30', noon: '13:30', pm: '20:00', offsetMin: 60, ...(cfg.times && typeof cfg.times === 'object' ? cfg.times : {}) };
+    const finalSchedule = (cfg.schedule && typeof cfg.schedule === 'object') ? cfg.schedule : { 0: 'off', 1: 'wfh', 2: 'wfh', 3: 'wfh', 4: 'wfh', 5: 'wfh', 6: 'off' };
 
     container.innerHTML = `
         <div class="max-w-3xl mx-auto space-y-8 animate-in pb-20">
@@ -798,10 +1071,10 @@ async function renderSettings(container) {
                     <button id="save-times" class="btn btn-primary !py-2 !text-xs font-black">Save Rules</button>
                 </div>
                 <div class="settings-content grid grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">AM Rule</label><input type="time" id="time-am" class="input" value="${times.am || '08:30'}"></div>
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">Mid-Day</label><input type="time" id="time-noon" class="input" value="${times.noon || '13:30'}"></div>
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">PM Rule</label><input type="time" id="time-pm" class="input" value="${times.pm || '20:00'}"></div>
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">Offset (M)</label><input type="number" id="time-offset" class="input" value="${times.offsetMin || 60}"></div>
+                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">AM Rule</label><input type="time" id="time-am" class="input" value="${finalTimes.am}"></div>
+                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">Mid-Day</label><input type="time" id="time-noon" class="input" value="${finalTimes.noon}"></div>
+                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">PM Rule</label><input type="time" id="time-pm" class="input" value="${finalTimes.pm}"></div>
+                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">Offset (M)</label><input type="number" id="time-offset" class="input" value="${finalTimes.offsetMin}"></div>
                 </div>
             </div>
 
@@ -816,14 +1089,33 @@ async function renderSettings(container) {
                 </div>
                 <div class="settings-content grid grid-cols-1 gap-1">
                     ${[1, 2, 3, 4, 5, 6, 0].map(day => {
-        const val = schedule[day] || 'wio', label = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][day];
+        const val = finalSchedule[day] || finalSchedule[String(day)] || 'wio';
+        const label = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][day];
+        const modeIcon = val === 'wfh' ? 'laptop' : val === 'off' ? 'moon' : 'building-2';
+        const modeDesc = val === 'wfh'
+            ? '<span class="text-primary">WFH</span> — Hệ thống tự động Punch'
+            : val === 'off'
+            ? '<span class="text-orange-500">Nghỉ</span> — Hệ thống không chạy'
+            : '<span class="text-foreground">Văn Phòng</span> — Vào VP check-in thủ công';
         return `
-                        <div class="flex items-center justify-between p-3.5 rounded-xl hover:bg-muted/30 transition-all group">
-                            <span class="font-bold text-sm leading-none opacity-80 group-hover:opacity-100">${label}</span>
-                            <div class="flex p-0.5 bg-muted rounded-lg gap-0.5">
-                                <button class="sched-opt text-[9px] font-black px-4 py-1.5 rounded-md ${val === 'wio' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}" data-day="${day}" data-val="wio">OFFICE</button>
-                                <button class="sched-opt text-[9px] font-black px-4 py-1.5 rounded-md ${val === 'wfh' ? 'bg-card shadow-sm text-primary' : 'text-muted-foreground'}" data-day="${day}" data-val="wfh">WFH</button>
-                                <button class="sched-opt text-[9px] font-black px-4 py-1.5 rounded-md ${val === 'off' ? 'bg-card shadow-sm text-orange-500' : 'text-muted-foreground'}" data-day="${day}" data-val="off">OFF</button>
+                        <div class="flex items-center justify-between p-3.5 rounded-xl hover:bg-muted/30 transition-all group" id="sched-row-${day}">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="sched-row-icon w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                    val === 'wfh' ? 'bg-primary/10 text-primary' :
+                                    val === 'off' ? 'bg-orange-500/10 text-orange-500' :
+                                    'bg-muted text-muted-foreground'
+                                }" data-day="${day}">
+                                    <i data-lucide="${modeIcon}" class="w-4 h-4"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="font-bold text-sm leading-none">${label}</p>
+                                    <p class="sched-row-desc text-[10px] font-medium text-muted-foreground mt-0.5" data-day="${day}">${modeDesc}</p>
+                                </div>
+                            </div>
+                            <div class="flex p-0.5 bg-muted rounded-lg gap-0.5 shrink-0">
+                                <button class="sched-opt text-[9px] font-black px-3 py-1.5 rounded-md ${val === 'wio' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}" data-day="${day}" data-val="wio">OFFICE</button>
+                                <button class="sched-opt text-[9px] font-black px-3 py-1.5 rounded-md ${val === 'wfh' ? 'bg-card shadow-sm text-primary' : 'text-muted-foreground'}" data-day="${day}" data-val="wfh">WFH</button>
+                                <button class="sched-opt text-[9px] font-black px-3 py-1.5 rounded-md ${val === 'off' ? 'bg-card shadow-sm text-orange-500' : 'text-muted-foreground'}" data-day="${day}" data-val="off">OFF</button>
                             </div>
                         </div>`;
     }).join('')}
@@ -862,17 +1154,51 @@ async function renderSettings(container) {
         </div>`;
     lucide.createIcons();
 
-    const currentSchedule = { ...schedule };
+    const currentSchedule = { ...finalSchedule };
+    const modeIconMap = { wio: 'building-2', wfh: 'laptop', off: 'moon' };
+    const modeDescMap = {
+        wio: (d) => `<span class="text-foreground">Văn Phòng</span> — Vào VP check-in thủ công`,
+        wfh: (d) => `<span class="text-primary">WFH</span> — Hệ thống tự động Punch`,
+        off: (d) => `<span class="text-orange-500">Nghỉ</span> — Hệ thống không chạy`,
+    };
     $$('.sched-opt').forEach(b => b.onclick = () => {
         const d = b.dataset.day, v = b.dataset.val; currentSchedule[d] = v;
         $$(`.sched-opt[data-day="${d}"]`).forEach(btn => {
-            btn.classList.remove('bg-card', 'shadow-sm', 'text-primary', 'text-orange-500'); btn.classList.add('text-muted-foreground');
+            btn.classList.remove('bg-card', 'shadow-sm', 'text-primary', 'text-orange-500', 'text-foreground'); btn.classList.add('text-muted-foreground');
         });
         b.classList.remove('text-muted-foreground'); b.classList.add('bg-card', 'shadow-sm');
-        if (v === 'wfh') b.classList.add('text-primary'); if (v === 'off') b.classList.add('text-orange-500');
+        if (v === 'wfh') b.classList.add('text-primary');
+        if (v === 'off') b.classList.add('text-orange-500');
+        if (v === 'wio') b.classList.add('text-foreground');
+        // Update row icon
+        const icon = $(`.sched-row-icon[data-day="${d}"]`);
+        if (icon) {
+            icon.className = `sched-row-icon w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                v === 'wfh' ? 'bg-primary/10 text-primary' : v === 'off' ? 'bg-orange-500/10 text-orange-500' : 'bg-muted text-muted-foreground'
+            }`;
+            icon.dataset.day = d;
+            icon.innerHTML = `<i data-lucide="${modeIconMap[v]}" class="w-4 h-4"></i>`;
+            lucide.createIcons({ nodes: [icon] });
+        }
+        // Update description
+        const desc = $(`.sched-row-desc[data-day="${d}"]`);
+        if (desc && modeDescMap[v]) desc.innerHTML = modeDescMap[v](d);
     });
 
-    $('#save-schedule').onclick = async () => { await API.updateSchedule(currentSchedule); toast('Cycle Saved', 'success'); };
+    $('#save-schedule').onclick = async () => {
+        const btn = $('#save-schedule');
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+        try {
+            await API.updateSchedule(currentSchedule);
+            toast('Weekly Cycle Saved ✓', 'success');
+        } catch (e) {
+            toast('Save failed: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Commit Cycle';
+        }
+    };
     $('#save-telegram').onclick = async () => { await API.updateSettings({ telegram: { token: $('#tg-token').value, chatId: $('#tg-chatid').value } }); toast('Bot Synced', 'success'); };
     $('#save-times').onclick = async () => {
         await API.updateSettings({ times: { am: $('#time-am').value, noon: $('#time-noon').value, pm: $('#time-pm').value, offsetMin: parseInt($('#time-offset').value) } });
@@ -881,7 +1207,7 @@ async function renderSettings(container) {
     
     // Config Export/Import
     $('#export-config').onclick = () => {
-        const config = { schedule: currentSchedule, telegram, times };
+        const config = { schedule: currentSchedule, telegram, times: finalTimes };
         const json = JSON.stringify(config, null, 2);
         Utils.downloadFile(json, `punch-config-${new Date().toISOString().split('T')[0]}.json`, 'application/json');
         toast('Config Exported', 'success');
@@ -939,6 +1265,7 @@ function onHashChange() {
     $$('.nav-tab').forEach(t => t.dataset.page === page ? t.classList.add('active') : t.classList.remove('active'));
     
     const c = $('#app');
+    c.innerHTML = `<div class="flex items-center justify-center p-20 opacity-40"><div class="w-6 h-6 border-2 border-foreground border-t-transparent rounded-full animate-spin"></div></div>`;
     routes[page](c).catch(e => { c.innerHTML = `<p class="p-20 text-center font-bold text-red-500">${e.message}</p>`; });
 }
 
@@ -961,7 +1288,12 @@ async function boot() {
         localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
     };
 
-    $$('.nav-tab').forEach(t => { t.onclick = () => { if (window.location.hash === `#${t.dataset.page}`) onHashChange(); else window.location.hash = t.dataset.page; }; });
+    $$('.nav-tab').forEach(t => { t.onclick = () => {
+        // Immediately mark active without waiting for render
+        $$('.nav-tab').forEach(b => b.classList.remove('active'));
+        t.classList.add('active');
+        if (window.location.hash === `#${t.dataset.page}`) onHashChange(); else window.location.hash = t.dataset.page;
+    }; });
 
     // Auto-auth for local development
     if (!API.hasSecret() && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {

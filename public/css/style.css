@@ -61,19 +61,27 @@ body {
   font-size: 0.75rem;
   font-weight: 500;
   z-index: 50;
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
 }
 
 header {
-  background: hsl(var(--card)/0.8);
-  backdrop-filter: blur(20px);
+  background: hsl(var(--card));
   border-bottom: 1px solid hsl(var(--border));
   padding: 0.75rem 0;
-  margin-bottom: 2rem;
   z-index: 40;
-  position: sticky;
-  top: 36px;
+  position: fixed;
+  top: 41px;
+  left: 0;
+  right: 0;
+  width: 100%;
+}
+
+body {
+  padding-top: 104px;
 }
 
 .header-inner {
@@ -365,12 +373,51 @@ nav {
   border-radius: 1rem !important;
   border: 1px solid hsl(var(--border)) !important;
   box-shadow: var(--shadow-lg) !important;
-  padding: 0.5rem;
+  background: hsl(var(--card)) !important;
+  padding: 1rem !important;
+  width: auto !important;
+}
+
+.flatpickr-calendar.open {
+  display: inline-block !important;
+}
+
+.flatpickr-month {
+  background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.flatpickr-weekday {
+  background: hsl(var(--muted)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  font-weight: 600 !important;
+}
+
+.flatpickr-day {
+  color: hsl(var(--foreground)) !important;
+  border: none !important;
 }
 
 .flatpickr-day.selected {
   background: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  border-radius: 0.5rem !important;
+}
+
+.flatpickr-day:hover {
+  background: hsl(var(--muted)) !important;
+  cursor: pointer !important;
+}
+
+.flatpickr-day.today {
   border-color: hsl(var(--primary)) !important;
+  font-weight: bold !important;
+}
+
+.flatpickr-input {
+  background: hsl(var(--input)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
 }
 
 /* Toasts */
