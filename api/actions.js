@@ -1,23 +1,18 @@
 // Consolidated API: mark-done, mark-off, mark-wfh-today, clear-off
 // Routes by 'action' query parameter or body field
 
-const { setPeriodState, setIsOff, setIsOffRange, setDayModeOverride } = require('../lib/kv');
+const { setPeriodState, setIsOff, setIsOffRange, setDayModeOverride, getTelegramConfig, kv } = require('../lib/kv');
+const { saveSwapOverride } = require('../lib/db');
 const { sendChat } = require('../lib/chat');
 const { getVietnamDateKey, getCurrentPeriod } = require('../lib/time');
-const { kv } = require('@vercel/kv');
+const { authenticate } = require('../lib/auth');
 const { Octokit } = require('@octokit/rest');
 
-const expected = process.env.PUNCH_SECRET || 'Thanhnam0';
 const githubPat = process.env.GITHUB_PAT;
 
 const GHA_OWNER = 'rei6868';
 const GHA_REPO = 'clv-punch-gem';
 const GHA_WORKFLOW_ID = 'wfh-punch.yml';
-
-function authenticate(req) {
-  const hdrSecret = req.headers['x-secret'] || '';
-  if (hdrSecret !== expected) throw new Error('invalid secret');
-}
 
 async function triggerGitHubWorkflow() {
   if (!githubPat) {
@@ -136,8 +131,13 @@ const handlers = {
     const dateKey = date;
     const todayKey = getVietnamDateKey();
 
-    // Lưu override
+    // Lưu override — persistent DB + KV cache
     await setDayModeOverride(dateKey, toMode);
+    try {
+      await saveSwapOverride(dateKey, toMode);
+    } catch (dbErr) {
+      console.warn('[swapDay] DB persist skipped:', dbErr.message);
+    }
 
     if (toMode === 'wfh') {
       // WIO → WFH: nếu là ngày hôm nay thì kích hoạt GHA luôn
@@ -190,7 +190,41 @@ const handlers = {
     });
 
     return ok({ date: dateKey, isOff: false });
-  }
+  },
+
+  async testTelegram(req, res, rid) {
+    const ok = (data = {}) => res.status(200).json({ ok: true, requestId: rid, ...data });
+    const bad = (code, msg) => res.status(code).json({ ok: false, error: msg, requestId: rid });
+
+    const { sendTelegram } = require('../lib/telegram');
+    const now = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+    const result = await sendTelegram({
+      title: '🧪 Test kết nối từ CLV Punch',
+      message: `Telegram bot đã kết nối thành công! ✅\nThời gian: ${now}`,
+    });
+    if (!result) return bad(400, 'Telegram chưa được cấu hình (token/chatId còn trống)');
+    if (result.ok === false) return bad(400, result.description || 'Telegram API error');
+    return ok({ sent: true });
+  },
+
+  async registerTelegramWebhook(req, res, rid) {
+    const ok = (data = {}) => res.status(200).json({ ok: true, requestId: rid, ...data });
+    const bad = (code, msg) => res.status(code).json({ ok: false, error: msg, requestId: rid });
+
+    const config = await getTelegramConfig();
+    if (!config || !config.token) return bad(400, 'Token chưa được lưu. Hãy Sync Bot trước.');
+    const { webhookUrl } = req.body;
+    if (!webhookUrl) return bad(400, 'webhookUrl required');
+
+    const r = await fetch(`https://api.telegram.org/bot${config.token}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: webhookUrl }),
+    });
+    const data = await r.json();
+    if (!data.ok) return bad(400, data.description || 'Telegram setWebhook failed');
+    return ok({ webhook: webhookUrl });
+  },
 };
 
 module.exports = async function handler(req, res) {
@@ -208,20 +242,20 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    authenticate(req);
+    await authenticate(req);
 
     const action = req.body.action || 'markDone';
     const handler = handlers[action];
 
     if (!handler) {
-      return bad(400, `unknown action: ${action}. Valid actions: markDone, markOff, markWfhToday, clearOff, swapDay`);
+      return bad(400, `unknown action: ${action}. Valid actions: markDone, markOff, markWfhToday, clearOff, swapDay, testTelegram, registerTelegramWebhook`);
     }
 
     return await handler(req, res, rid);
 
   } catch (e) {
     const msg = (e && e.message) || 'unknown error';
-    if (msg.includes('secret')) return bad(403, msg);
+    if (msg.includes('secret') || msg.includes('session')) return bad(403, msg);
     if (msg.includes('method not allowed')) return bad(405, msg);
     if (msg.includes('unsupported')) return bad(415, msg);
     if (msg.includes('invalid')) return bad(400, msg);

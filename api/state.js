@@ -1,13 +1,6 @@
 const { getFullDayState } = require('../lib/kv');
 const { getVietnamDateKey } = require('../lib/time');
-
-const expected = process.env.PUNCH_SECRET || 'Thanhnam0';
-
-// Helper xác thực (chỉ cần query secret cho GET)
-function authenticate(req) {
-  const qSecret = (req.query && req.query.secret) || '';
-  if (qSecret !== expected) throw new Error('invalid secret');
-}
+const { authenticate } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
   const rid = req.headers['x-vercel-id'] || Date.now().toString();
@@ -21,7 +14,7 @@ module.exports = async function handler(req, res) {
 
   try {
     // 1. Xác thực (an toàn hơn cho debug)
-    authenticate(req);
+    await authenticate(req);
 
     // 2. Bulk mode: ?dates=2026-02-23,2026-02-24,...
     if (req.query.dates) {
@@ -50,7 +43,7 @@ module.exports = async function handler(req, res) {
 
   } catch (e) {
     const msg = (e && e.message) || 'unknown error';
-    if (msg.includes('secret')) return bad(403, msg);
+    if (msg.includes('secret') || msg.includes('session')) return bad(403, msg);
     return bad(500, 'server error', { detail: msg });
   }
 }

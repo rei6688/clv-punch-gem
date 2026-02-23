@@ -28,6 +28,7 @@
     "vercel": "^50.22.0"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.0",
     "@octokit/rest": "^20.1.0",
     "@vercel/kv": "^1.0.1",
     "axios": "^1.6.2",

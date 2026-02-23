@@ -1,24 +1,17 @@
 // Consolidated API: cron-check-wfh, cron-reminder, cron-reset
 // Routes by 'cron' parameter
 
-const { getIsEnabled, getIsOff, getPeriodState, setPeriodState } = require('../lib/kv');
-const { kv } = require('@vercel/kv');
+const { getIsEnabled, getIsOff, getPeriodState, setPeriodState, getPunchTimes, kv } = require('../lib/kv');
 const { getVietnamDateKey, getVietnamTime, isWFHDay, getCurrentPeriod, isWeekend } = require('../lib/time');
 const { sendChat } = require('../lib/chat');
+const { authenticateCron } = require('../lib/auth');
 const { Octokit } = require('@octokit/rest');
 
-const punchSecret = process.env.PUNCH_SECRET || 'Thanhnam0';
 const githubPat = process.env.GITHUB_PAT;
 
 const GHA_OWNER = 'rei6868';
 const GHA_REPO = 'clv-punch-gem';
 const GHA_WORKFLOW_ID = 'wfh-punch.yml';
-
-function authenticateCron(req) {
-  const auth = req.headers.authorization || '';
-  const token = auth.replace(/^Bearer\s+/, '');
-  if (token !== punchSecret) throw new Error('invalid cron secret');
-}
 
 async function triggerGitHubWorkflow() {
   if (!githubPat) {
@@ -103,6 +96,7 @@ const handlers = {
     const dateKey = getVietnamDateKey();
     const now = getVietnamTime();
     const currentHour = now.getHours();
+    const nowMin = currentHour * 60 + now.getMinutes();
 
     const isEnabled = await getIsEnabled();
     if (!isEnabled) {
@@ -132,16 +126,25 @@ const handlers = {
         return ok({ message: `Skipped reminder: Period ${period} is already '${status}'.` });
       }
 
+      // Read configurable deadline times (fall back to defaults if not set)
+      const savedTimes = await getPunchTimes();
+      const amStr = (savedTimes && savedTimes.am) || '08:30';
+      const pmStr = (savedTimes && savedTimes.pm) || '20:00';
+      const [amH, amM] = amStr.split(':').map(Number);
+      const [pmH, pmM] = pmStr.split(':').map(Number);
+      const amDeadlineMin = amH * 60 + (amM || 0);
+      const pmDeadlineMin = pmH * 60 + (pmM || 0);
+
       let chatParams = null;
       let lockKey = `lock:${dateKey}:${period}`;
       const lockTTL = 60 * 15;
 
-      if (period === 'am' && currentHour >= 6 && currentHour <= 8) {
-        if (currentHour === 8 && now.getMinutes() >= 30) {
+      if (period === 'am' && currentHour >= 6 && currentHour <= amH) {
+        if (nowMin >= amDeadlineMin) {
           lockKey = `lock:${dateKey}:am:final`;
           chatParams = {
             title: '⛔ CẢNH BÁO (AM) - TRỄ DEADLINE',
-            message: 'Đã 08:30. GHA đã thất bại hoặc không chạy. Vui lòng tự Punch In và "Mark DONE" thủ công ngay!',
+            message: `Đã ${amStr}. GHA đã thất bại hoặc không chạy. Vui lòng tự Punch In và "Mark DONE" thủ công ngay!`,
             icon: 'failure',
           };
         } else {
@@ -151,12 +154,12 @@ const handlers = {
             icon: 'info',
           };
         }
-      } else if (period === 'pm' && currentHour >= 18 && currentHour <= 20) {
-        if (currentHour === 20) {
+      } else if (period === 'pm' && currentHour >= 18 && currentHour <= pmH) {
+        if (nowMin >= pmDeadlineMin) {
           lockKey = `lock:${dateKey}:pm:final`;
           chatParams = {
             title: '⛔ CẢNH BÁO (PM) - TRỄ DEADLINE',
-            message: 'Đã 20:00. Vui lòng tự Punch Out và "Mark DONE" thủ công ngay!',
+            message: `Đã ${pmStr}. Vui lòng tự Punch Out và "Mark DONE" thủ công ngay!`,
             icon: 'failure',
           };
         } else {
@@ -231,7 +234,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    authenticateCron(req);
+    await authenticateCron(req);
 
     const cronType = (req.query && req.query.cron) || req.body.cron || 'reminder';
     const handler = handlers[cronType];
@@ -244,7 +247,7 @@ module.exports = async function handler(req, res) {
 
   } catch (e) {
     const msg = (e && e.message) || 'unknown error';
-    if (msg.includes('secret')) return bad(403, msg);
+    if (msg.includes('secret') || msg.includes('session')) return bad(403, msg);
     if (msg.includes('method not allowed')) return bad(405, msg);
     return bad(500, 'cron error', { detail: msg });
   }

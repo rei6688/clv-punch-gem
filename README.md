@@ -21,43 +21,68 @@ Hệ thống tự động check-in/check-out cho **Cyberlogitec Blueprint**, v�
 |---|---|
 | Frontend | Vanilla JS, Tailwind CSS (CDN), Lucide Icons |
 | Backend API | Vercel Serverless Functions (`api/*.js`) |
-| Database | **Vercel KV** (Upstash Redis) — xem chi tiết bên dưới |
+| Database | **Vercel KV** (Upstash Redis) for config cache; **Turso** (LibSQL/SQLite) for persistent swap history |
 | Automation | GitHub Actions (`wfh-punch.yml`) |
 | Dev server | Node.js custom (`server/dev.js`) |
 | Tests | Playwright |
 
 ---
 
-## 🗄️ Database — Vercel KV (Redis)
+## 🗄️ Database
 
-Repo **KHÔNG dùng SQL**. State được lưu trong **Vercel KV** (Redis KV store via Upstash).
+### Vercel KV (Redis) — Config cache
 
-### Key schema
+Vercel KV stores runtime config and short-lived day state.
+Swap overrides are cached here (30-day TTL) but the source of truth is Turso.
 
 ```
 punch:config:isEnabled              → boolean
 punch:config:schedule               → { "0":"off","1":"wfh","2":"wio",... }
 punch:config:telegram               → { chatId, token }
 punch:config:times                  → { am:"08:30", pm:"20:00" }
-punch:day:{YYYY-MM-DD}:off          → true  (TTL 3 ngày)
-punch:day:{YYYY-MM-DD}:am           → { status, recordedPunchTime, ... }  (TTL 3 ngày)
-punch:day:{YYYY-MM-DD}:pm           → { status, ... }  (TTL 3 ngày)
-punch:day:{YYYY-MM-DD}:mode_override → "wfh" | "wio"  (TTL 7 ngày) ⚠️
+punch:day:{YYYY-MM-DD}:off          → true  (TTL 3 days)
+punch:day:{YYYY-MM-DD}:am           → { status, recordedPunchTime, ... }  (TTL 3 days)
+punch:day:{YYYY-MM-DD}:pm           → { status, ... }  (TTL 3 days)
+punch:day:{YYYY-MM-DD}:mode_override → "wfh" | "wio"  (TTL 30 days, cache for Turso)
 ```
 
-> ⚠️ `mode_override` có TTL 7 ngày — không phù hợp lưu override dài hạn.  
-> Xem [HANDOVER_2026_02_23.md](HANDOVER_2026_02_23.md) để biết recommendation migrate sang Turso/Neon.
+### Turso (LibSQL/SQLite) — Persistent swap history
+
+Turso stores swap overrides permanently and punch history.
+Reads go to Turso first, falling back to KV if Turso is unavailable.
+
+```sql
+CREATE TABLE swap_overrides (
+  date TEXT PRIMARY KEY,   -- YYYY-MM-DD
+  mode TEXT NOT NULL,      -- 'wfh' | 'wio'
+  created_at INTEGER,
+  expires_at INTEGER
+);
+
+CREATE TABLE punch_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT,
+  period TEXT,             -- 'am' | 'pm'
+  status TEXT,
+  punch_time TEXT,
+  created_at INTEGER
+);
+```
+
+Module: `lib/db.js` — functions: `saveSwapOverride`, `getSwapOverride`, `getBulkSwapOverrides`, `listSwapHistory`, `savePunchResult`
 
 ### Env vars cần thiết
 
 ```env
-PUNCH_SECRET=xxx               # password để call API từ frontend
+PUNCH_SECRET=xxx               # password to call API from frontend
 KV_REST_API_URL=xxx            # Vercel KV endpoint
 KV_REST_API_TOKEN=xxx          # Vercel KV token (read/write)
 KV_REST_API_READ_ONLY_TOKEN=xxx
 KV_URL=xxx
 REDIS_URL=xxx
-GOOGLE_CHAT_WEBHOOK_URL=xxx    # optional — nhận thông báo swap/punch
+TURSO_DATABASE_URL=libsql://...  # Turso LibSQL endpoint
+TURSO_AUTH_TOKEN=...             # Turso auth token
+GOOGLE_CHAT_WEBHOOK_URL=xxx    # optional — notifications
 GITHUB_PAT=xxx                 # required production, optional local
 TELEGRAM_BOT_TOKEN=xxx         # optional
 ```
@@ -102,6 +127,7 @@ clv-punch-gem/
 │   └── state/report.js
 ├── lib/
 │   ├── kv.js               KV helpers: getFullDayState, setDayModeOverride, ...
+│   ├── db.js               Turso (LibSQL) persistent storage: swap overrides, punch history
 │   ├── chat.js             Google Chat notifications
 │   ├── mail.js
 │   ├── telegram.js
@@ -185,14 +211,15 @@ Playwright config: `playwright.config.js` (base URL: `http://localhost:3001`)
 
 | Issue | Priority | Notes |
 |---|---|---|
-| `mode_override` TTL 7 ngày | High | Cần persistent DB |
-| Không có swap history | High | Cần DB với table `swap_overrides` |
-| GHA không trigger local | Low | Bình thường — cần `GITHUB_PAT` |
-| Weekend swap chỉ cho là OFF | Low | Đã fix: giờ có inline VP/WFH picker |
+| `mode_override` KV TTL 30 days | Low | KV is now cache; Turso is source of truth |
+| Swap history queryable | Done | `lib/db.js` — `listSwapHistory()` |
+| GHA không trigger local | Low | Normal — needs `GITHUB_PAT` |
+| Weekend swap chỉ cho là OFF | Low | Fixed: inline VP/WFH picker |
 
-### Roadmap: Migrate to persistent DB
-Xem chi tiết trong [HANDOVER_2026_02_23.md § Đề xuất DB](HANDOVER_2026_02_23.md).  
-TL;DR: Dùng **Turso** (LibSQL, free 500 DB) hoặc **Neon** (Postgres, free 0.5GB).
+### Roadmap: Turso DB integration
+Turso (LibSQL) added in `feat/persistent-swap-storage` branch.
+`lib/db.js` provides persistent swap override storage.
+KV remains for config keys (`isEnabled`, `schedule`, `telegram`, `times`) and as a cache layer for mode overrides.
 
 ---
 

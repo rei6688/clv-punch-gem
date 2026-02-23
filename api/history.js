@@ -3,15 +3,7 @@
 
 const { getFullDayState } = require('../lib/kv');
 const { getVietnamDateKey, getVietnamTime } = require('../lib/time');
-
-const expected = process.env.PUNCH_SECRET || 'Thanhnam0';
-
-function authenticate(req) {
-    const hdrSecret = req.headers['x-secret'] || '';
-    const qSecret = (req.query && req.query.secret) || '';
-    const secret = hdrSecret || qSecret || '';
-    if (secret !== expected) throw new Error('invalid secret');
-}
+const { authenticate } = require('../lib/auth');
 
 module.exports = async function handler(req, res) {
     const rid = req.headers['x-vercel-id'] || Date.now().toString();
@@ -24,7 +16,7 @@ module.exports = async function handler(req, res) {
     }
 
     try {
-        authenticate(req);
+        await authenticate(req);
 
         const days = Math.min(parseInt(req.query.days || '30', 10), 90);
         const now = getVietnamTime();
@@ -50,7 +42,7 @@ module.exports = async function handler(req, res) {
 
     } catch (e) {
         const msg = (e && e.message) || 'unknown error';
-        if (msg.includes('secret')) return bad(403, msg);
+        if (msg.includes('secret') || msg.includes('session')) return bad(403, msg);
         return bad(500, 'server error', { detail: msg });
     }
 }

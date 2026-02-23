@@ -1047,16 +1047,43 @@ async function renderSettings(container) {
                         <div class="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center"><i data-lucide="send" class="w-5 h-5"></i></div>
                         <div><p class="font-black">Telegram Bot</p><p class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Notifications & Control</p></div>
                     </div>
-                    <button id="save-telegram" class="btn btn-primary !py-2 !text-xs font-black">Sync Bot</button>
+                    <div class="flex gap-2">
+                        <button id="test-telegram" class="btn btn-outline !py-2 !text-xs font-black flex items-center gap-1.5">
+                            <i data-lucide="zap" class="w-3.5 h-3.5 text-sky-500"></i>Test
+                        </button>
+                        <button id="save-telegram" class="btn btn-primary !py-2 !text-xs font-black">Sync Bot</button>
+                    </div>
                 </div>
+
+                <!-- Setup guide -->
+                <div class="p-3 rounded-xl bg-sky-500/5 border border-sky-200/30 space-y-2 text-[11px] leading-snug">
+                    <p class="font-black uppercase tracking-widest text-sky-600 dark:text-sky-400 text-[9px]">Setup Guide</p>
+                    <ol class="space-y-1.5 list-decimal list-inside font-medium text-muted-foreground">
+                        <li>Nhắn <code class="font-mono bg-muted px-1 rounded">/newbot</code> cho <b>@BotFather</b> trên Telegram → nhận <b>Token</b></li>
+                        <li>Nhắn bất kỳ tin nhắn cho bot → mở <code class="font-mono bg-muted px-1 rounded text-[10px]">api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> → lấy <b>chat_id</b></li>
+                        <li>Điền Token + Chat ID bên dưới → bấm <b>Sync Bot</b></li>
+                        <li>Bấm <b>Register Webhook</b> để bot nhận lệnh <code class="font-mono bg-muted px-1 rounded">/status</code> và inline buttons</li>
+                        <li>Bấm <b>Test</b> để kiểm tra bot có nhắn tin không</li>
+                    </ol>
+                </div>
+
                 <div class="settings-content grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="space-y-1.5">
                         <label class="text-[9px] font-black uppercase opacity-40 ml-1">Bot Token</label>
-                        <input type="password" id="tg-token" class="input" placeholder="Enter Token" value="${telegram.token || ''}">
+                        <input type="password" id="tg-token" class="input" placeholder="123456789:ABCDef..." value="${telegram.token || ''}">
                     </div>
                     <div class="space-y-1.5">
                         <label class="text-[9px] font-black uppercase opacity-40 ml-1">Chat ID</label>
-                        <input type="text" id="tg-chatid" class="input" placeholder="Enter ID" value="${telegram.chatId || ''}">
+                        <input type="text" id="tg-chatid" class="input" placeholder="123456789" value="${telegram.chatId || ''}">
+                    </div>
+                </div>
+
+                <!-- Webhook registration -->
+                <div class="pt-2 space-y-2 border-t border-border/40">
+                    <label class="text-[9px] font-black uppercase opacity-40">Webhook URL (nhận lệnh từ Telegram)</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="tg-webhook-url" class="input flex-1 font-mono text-[11px]" placeholder="https://your-app.vercel.app/api/telegram-webhook">
+                        <button id="register-webhook" class="btn btn-outline !py-2 !text-xs font-black whitespace-nowrap">Register Webhook</button>
                     </div>
                 </div>
             </div>
@@ -1070,11 +1097,31 @@ async function renderSettings(container) {
                     </div>
                     <button id="save-times" class="btn btn-primary !py-2 !text-xs font-black">Save Rules</button>
                 </div>
+                <div class="p-3 mb-2 rounded-xl bg-orange-500/5 border border-orange-200/30 flex gap-2 text-[11px] text-orange-700/80 dark:text-orange-400/80 font-medium leading-snug">
+                    <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
+                    <span>AM/PM Deadline ảnh hưởng: (1) cảnh báo LATE trong lịch sử, (2) mốc gửi alert nhắc nhở của cron. Lịch chạy Playwright thực tế vẫn cố định trong <code class="font-mono bg-orange-100/60 dark:bg-orange-900/30 px-1 rounded">.github/workflows/</code>.</span>
+                </div>
                 <div class="settings-content grid grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">AM Rule</label><input type="time" id="time-am" class="input" value="${finalTimes.am}"></div>
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">Mid-Day</label><input type="time" id="time-noon" class="input" value="${finalTimes.noon}"></div>
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">PM Rule</label><input type="time" id="time-pm" class="input" value="${finalTimes.pm}"></div>
-                    <div class="space-y-1.5"><label class="text-[9px] font-black uppercase opacity-40">Offset (M)</label><input type="number" id="time-offset" class="input" value="${finalTimes.offsetMin}"></div>
+                    <div class="space-y-1.5">
+                        <label class="text-[9px] font-black uppercase opacity-40">AM Deadline</label>
+                        <input type="time" id="time-am" class="input" value="${finalTimes.am}">
+                        <p class="text-[9px] text-muted-foreground/60 font-medium">Punch-in muộn nhất. Sau giờ này → flagged LATE.</p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-[9px] font-black uppercase opacity-40">Mid-Day Split</label>
+                        <input type="time" id="time-noon" class="input" value="${finalTimes.noon}">
+                        <p class="text-[9px] text-muted-foreground/60 font-medium">Ranh giới AM/PM hiển thị. Không ảnh hưởng logic.</p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-[9px] font-black uppercase opacity-40">PM Deadline</label>
+                        <input type="time" id="time-pm" class="input" value="${finalTimes.pm}">
+                        <p class="text-[9px] text-muted-foreground/60 font-medium">Punch-out muộn nhất. Sau giờ này → flagged LATE.</p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-[9px] font-black uppercase opacity-40 flex items-center gap-1">Offset (phút) <span class="text-orange-400 normal-case font-bold">TBD</span></label>
+                        <input type="number" id="time-offset" class="input opacity-50" value="${finalTimes.offsetMin}" disabled>
+                        <p class="text-[9px] text-muted-foreground/60 font-medium">Chưa implement — sẽ dùng để điều chỉnh GHA schedule.</p>
+                    </div>
                 </div>
             </div>
 
@@ -1199,10 +1246,47 @@ async function renderSettings(container) {
             btn.textContent = 'Commit Cycle';
         }
     };
-    $('#save-telegram').onclick = async () => { await API.updateSettings({ telegram: { token: $('#tg-token').value, chatId: $('#tg-chatid').value } }); toast('Bot Synced', 'success'); };
+    $('#save-telegram').onclick = async () => {
+        const btn = $('#save-telegram');
+        btn.disabled = true; btn.textContent = 'Syncing...';
+        try {
+            await API.updateSettings({ telegram: { token: $('#tg-token').value, chatId: $('#tg-chatid').value } });
+            toast('Bot Synced', 'success');
+        } catch (e) { toast('Save failed: ' + e.message, 'error'); }
+        finally { btn.disabled = false; btn.textContent = 'Sync Bot'; }
+    };
+    // Auto-fill webhook URL
+    const webhookInput = $('#tg-webhook-url');
+    if (webhookInput && !webhookInput.value) webhookInput.value = `${window.location.origin}/api/telegram-webhook`;
+
+    $('#test-telegram').onclick = async () => {
+        const btn = $('#test-telegram');
+        btn.disabled = true; btn.textContent = 'Sending...';
+        try {
+            await API.testTelegram();
+            toast('Test message sent ✓ — check Telegram!', 'success');
+        } catch (e) { toast('Test failed: ' + e.message, 'error'); }
+        finally { btn.disabled = false; btn.innerHTML = '<i data-lucide="zap" class="w-3.5 h-3.5 text-sky-500"></i>Test'; lucide.createIcons({ nodes: [btn] }); }
+    };
+    $('#register-webhook').onclick = async () => {
+        const webhookUrl = ($('#tg-webhook-url').value || '').trim();
+        if (!webhookUrl) { toast('Nhập Webhook URL trước', 'error'); return; }
+        const btn = $('#register-webhook');
+        btn.disabled = true; btn.textContent = 'Registering...';
+        try {
+            await API.registerTelegramWebhook(webhookUrl);
+            toast('Webhook registered ✓', 'success');
+        } catch (e) { toast('Register failed: ' + e.message, 'error'); }
+        finally { btn.disabled = false; btn.textContent = 'Register Webhook'; }
+    };
     $('#save-times').onclick = async () => {
-        await API.updateSettings({ times: { am: $('#time-am').value, noon: $('#time-noon').value, pm: $('#time-pm').value, offsetMin: parseInt($('#time-offset').value) } });
-        toast('Rules Updated', 'success');
+        const btn = $('#save-times');
+        btn.disabled = true; btn.textContent = 'Saving...';
+        try {
+            await API.updateSettings({ times: { am: $('#time-am').value, noon: $('#time-noon').value, pm: $('#time-pm').value, offsetMin: parseInt($('#time-offset').value) } });
+            toast('Rules Updated ✓', 'success');
+        } catch (e) { toast('Save failed: ' + e.message, 'error'); }
+        finally { btn.disabled = false; btn.textContent = 'Save Rules'; }
     };
     
     // Config Export/Import
@@ -1269,6 +1353,79 @@ function onHashChange() {
     routes[page](c).catch(e => { c.innerHTML = `<p class="p-20 text-center font-bold text-red-500">${e.message}</p>`; });
 }
 
+// ── Auth forms (register / login) ────────────────────────────
+function showAuthForm(mode) {
+    const isRegister = mode === 'register';
+    const root = $('#modal-root');
+    root.innerHTML = `<div class="modal-overlay animate-in"><div class="modal-content !max-w-sm space-y-5">
+        <div class="text-center">
+            <h2 class="text-xl font-black">${isRegister ? 'Create Account' : 'Sign In'}</h2>
+            <p class="text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-1">
+                ${isRegister ? 'First-time setup — create your account' : 'Enter your credentials'}
+            </p>
+        </div>
+        <div class="space-y-3">
+            <input type="text"     id="auth-user" class="input w-full" placeholder="Username" autocomplete="username" spellcheck="false">
+            <div class="relative">
+                <input type="password" id="auth-pass" class="input w-full pr-10" placeholder="Password" autocomplete="${isRegister ? 'new-password' : 'current-password'}">
+                <button id="auth-eye" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <svg id="auth-eye-icon" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+            </div>
+        </div>
+        <div id="auth-error" class="hidden text-[11px] text-destructive font-medium text-center"></div>
+        <button id="auth-submit" class="btn btn-primary w-full shadow-lg shadow-primary/20">
+            ${isRegister ? 'Create Account' : 'Sign In'}
+        </button>
+        ${!isRegister ? '' : '<p class="text-[10px] text-center text-muted-foreground">You can register multiple accounts later in Settings</p>'}
+    </div></div>`;
+
+    // Eye toggle
+    $('#auth-eye').onclick = () => {
+        const inp = $('#auth-pass');
+        inp.type = inp.type === 'password' ? 'text' : 'password';
+        $('#auth-eye-icon').innerHTML = inp.type === 'text'
+            ? '<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/>'
+            : '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>';
+    };
+
+    const errEl = $('#auth-error');
+    const submit = async () => {
+        const u = $('#auth-user').value.trim();
+        const p = $('#auth-pass').value;
+        if (!u || !p) { errEl.classList.remove('hidden'); errEl.textContent = 'Please fill both fields.'; return; }
+
+        errEl.classList.add('hidden');
+        $('#auth-submit').disabled = true;
+        $('#auth-submit').textContent = isRegister ? 'Creating…' : 'Signing in…';
+        try {
+            let res;
+            if (isRegister) {
+                res = await API.authRegister(u, p);
+                if (!res.ok) throw new Error(res.error);
+                // Auto-login after register
+                res = await API.authLogin(u, p);
+            } else {
+                res = await API.authLogin(u, p);
+            }
+            if (!res.ok) throw new Error(res.error);
+            API.setSession(res.token);
+            location.reload();
+        } catch (e) {
+            errEl.classList.remove('hidden');
+            errEl.textContent = e.message;
+            $('#auth-submit').disabled = false;
+            $('#auth-submit').textContent = isRegister ? 'Create Account' : 'Sign In';
+        }
+    };
+
+    $('#auth-submit').onclick = submit;
+    ['auth-user', 'auth-pass'].forEach(id => {
+        $('#' + id).onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
+    });
+    setTimeout(() => $('#auth-user') && $('#auth-user').focus(), 100);
+}
+
 async function boot() {
     const s = localStorage.getItem('theme') || 'light';
     if (s === 'dark') document.documentElement.classList.add('dark');
@@ -1295,44 +1452,23 @@ async function boot() {
         if (window.location.hash === `#${t.dataset.page}`) onHashChange(); else window.location.hash = t.dataset.page;
     }; });
 
-    // Auto-auth for local development
-    if (!API.hasSecret() && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-        try {
-            const secret = await API.getDevSecret();
-            if (secret) {
-                API.setSecret(secret);
-                console.log('✅ Auto-authenticated from .env');
-                onHashChange();
-                return;
-            }
-        } catch (e) { 
-            console.warn('Dev secret endpoint not available:', e);
-        }
-    }
+    // ── Auth gate ─────────────────────────────────────────────
+    const authStatus = await API.authCheck();
 
-    if (!API.hasSecret()) {
-        const root = $('#modal-root');
-        root.innerHTML = `<div class="modal-overlay animate-in"><div class="modal-content !max-w-xs text-center space-y-4">
-            <h2 class="text-xl font-black">Authentication</h2>
-            <p class="text-[10px] text-muted-foreground uppercase font-black tracking-widest">Enter PUNCH_SECRET to unlock</p>
-            <input type="password" id="s-input" class="input text-center" placeholder="••••••••" autocomplete="current-password">
-            <button id="s-submit" class="btn btn-primary w-full shadow-lg shadow-primary/20">Unlock Dashboard</button>
-            <p class="text-[9px] text-muted-foreground/60">Local dev: Check .env.local for PUNCH_SECRET</p>
-        </div></div>`;
-        const submit = async () => { 
-            const v = $('#s-input').value; 
-            if (!v) return; 
-            API.setSecret(v); 
-            try {
-                // Test the secret by calling state API
-                await API.getState();
-                location.reload();
-            } catch (e) {
-                alert('Invalid secret: ' + e.message);
-            }
-        };
-        $('#s-submit').onclick = submit;
-        $('#s-input').onkeydown = e => e.key === 'Enter' && submit();
+    // Already authenticated via session token
+    if (authStatus.authenticated) {
+        // good — fall through to dashboard
+    }
+    // First-time setup: no user registered yet
+    else if (authStatus.needsSetup) {
+        showAuthForm('register');
+        return;
+    }
+    // Has valid session check but not authenticated, or check failed → show login
+    else {
+        API.clearSecret();
+        API.clearSession();
+        showAuthForm('login');
         return;
     }
 
