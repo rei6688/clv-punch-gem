@@ -441,11 +441,11 @@ async function renderDashboard(container) {
                         <span class="text-[9px] font-black uppercase tracking-wide">Punch Now</span>
                     </button>
                     <button id="qa-swap-day" class="btn btn-outline h-20 flex-col !gap-1.5 hover:-translate-y-1 transition-all hover:border-primary/50 group">
-                        <span class="text-2xl">🔄</span>
+                        <i data-lucide="arrow-left-right" class="w-6 h-6 text-primary opacity-60 group-hover:opacity-100"></i>
                         <span class="text-[9px] font-black uppercase tracking-wide">Swap Day</span>
                     </button>
                     <button id="qa-range-off" class="btn btn-outline h-20 flex-col !gap-1.5 border-dashed hover:border-solid hover:-translate-y-1 transition-all group">
-                        <span class="text-3xl">🌴</span>
+                        <i data-lucide="umbrella" class="w-6 h-6 text-orange-400 opacity-60 group-hover:opacity-100"></i>
                         <span class="text-[9px] font-black uppercase tracking-wide">Vacation</span>
                     </button>
                     <button id="qa-mark-am" class="btn btn-outline h-20 flex-col !gap-1.5 hover:-translate-y-1 transition-transform group">
@@ -1022,7 +1022,20 @@ async function renderSettings(container) {
         if (v === 'wfh') b.classList.add('text-primary'); if (v === 'off') b.classList.add('text-orange-500');
     });
 
-    $('#save-schedule').onclick = async () => { await API.updateSchedule(currentSchedule); toast('Cycle Saved', 'success'); };
+    $('#save-schedule').onclick = async () => {
+        const btn = $('#save-schedule');
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+        try {
+            await API.updateSchedule(currentSchedule);
+            toast('Weekly Cycle Saved ✓', 'success');
+        } catch (e) {
+            toast('Save failed: ' + e.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Commit Cycle';
+        }
+    };
     $('#save-telegram').onclick = async () => { await API.updateSettings({ telegram: { token: $('#tg-token').value, chatId: $('#tg-chatid').value } }); toast('Bot Synced', 'success'); };
     $('#save-times').onclick = async () => {
         await API.updateSettings({ times: { am: $('#time-am').value, noon: $('#time-noon').value, pm: $('#time-pm').value, offsetMin: parseInt($('#time-offset').value) } });

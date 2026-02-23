@@ -90,7 +90,14 @@ async function handleApi(req, res, urlObj) {
     req.body = {};
   }
 
-  const mod = require(apiFile);
+  const mod = (() => {
+    // Bust require cache for the API file and all project-local lib deps
+    const libDir = path.resolve(__dirname, '../lib');
+    Object.keys(require.cache).forEach(k => {
+      if (k.startsWith(apiDir) || k.startsWith(libDir)) delete require.cache[k];
+    });
+    return require(apiFile);
+  })();
   const handler = mod.default || mod;
   if (typeof handler !== 'function') {
     return res.status(500).json({ ok: false, error: 'Invalid API handler' });

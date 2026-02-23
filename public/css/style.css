@@ -61,19 +61,27 @@ body {
   font-size: 0.75rem;
   font-weight: 500;
   z-index: 50;
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
 }
 
 header {
-  background: hsl(var(--card)/0.8);
-  backdrop-filter: blur(20px);
+  background: hsl(var(--card));
   border-bottom: 1px solid hsl(var(--border));
   padding: 0.75rem 0;
-  margin-bottom: 2rem;
   z-index: 40;
-  position: sticky;
-  top: 36px;
+  position: fixed;
+  top: 41px;
+  left: 0;
+  right: 0;
+  width: 100%;
+}
+
+body {
+  padding-top: 104px;
 }
 
 .header-inner {
