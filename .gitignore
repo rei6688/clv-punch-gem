@@ -12,3 +12,7 @@ test-results/
 /screenshots
 .vercel
 .env*.local
+
+# Claude Code temp files
+tmpclaude-*
+nul

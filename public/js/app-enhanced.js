@@ -1403,12 +1403,12 @@ function showAuthForm(mode) {
             if (isRegister) {
                 res = await API.authRegister(u, p);
                 if (!res.ok) throw new Error(res.error);
-                // Auto-login after register
-                res = await API.authLogin(u, p);
+                // Register now returns token directly — no separate login needed
             } else {
                 res = await API.authLogin(u, p);
             }
             if (!res.ok) throw new Error(res.error);
+            if (!res.token) throw new Error('No session token returned');
             API.setSession(res.token);
             location.reload();
         } catch (e) {
