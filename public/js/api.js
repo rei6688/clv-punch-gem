@@ -3,36 +3,29 @@
 
 const BASE = '';
 
-// ── Auth ──────────────────────────────────────────────────────
-let _secret  = localStorage.getItem('punch_secret')  || '';
-let _session = localStorage.getItem('punch_session') || '';
+// ── Auth (PUNCH_SECRET) ──────────────────────────────────────
+let _secret = localStorage.getItem('punch_secret') || '';
 
 export function getSecret()  { return _secret; }
 export function setSecret(s) { _secret = s; localStorage.setItem('punch_secret', s); }
 export function clearSecret() { _secret = ''; localStorage.removeItem('punch_secret'); }
 export function hasSecret()  { return !!_secret; }
 
-export function getSession()   { return _session; }
-export function setSession(t)  { _session = t; localStorage.setItem('punch_session', t); }
-export function clearSession() { _session = ''; localStorage.removeItem('punch_session'); }
-export function hasSession()   { return !!_session; }
-export function isAuthed()     { return !!_session || !!_secret; }
-
 // ── Fetch helpers ─────────────────────────────────────────────
 async function apiFetch(path, options = {}) {
     const headers = {
         'Content-Type': 'application/json',
-        ...(_session ? { 'X-Session': _session } : { 'X-Secret': _secret }),
+        ...(_secret ? { 'X-Secret': _secret } : {}),
         ...(options.headers || {}),
     };
     const res = await fetch(BASE + path, { ...options, headers });
-    
+
     // Check if response is JSON
     const contentType = res.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
         throw new Error(`Server returned non-JSON response (${res.status})`);
     }
-    
+
     const data = await res.json();
     if (!data.ok && res.status === 403) {
         throw new Error('AUTH_FAIL');
@@ -44,8 +37,7 @@ async function apiFetch(path, options = {}) {
 }
 
 async function apiGet(path) {
-    // Only add ?secret= for legacy PUNCH_SECRET mode; session auth uses X-Session header
-    if (!_session && _secret) {
+    if (_secret) {
         const sep = path.includes('?') ? '&' : '?';
         return apiFetch(`${path}${sep}secret=${encodeURIComponent(_secret)}`, { method: 'GET' });
     }
@@ -63,12 +55,8 @@ async function apiPost(path, body = {}) {
 
 /** GET /api/state — today's full state */
 export async function getState(date) {
-    if (!_session && _secret) {
-        const q = date ? `?date=${date}&secret=${encodeURIComponent(_secret)}` : `?secret=${encodeURIComponent(_secret)}`;
-        return apiFetch(`/api/state${q}`, { method: 'GET' });
-    }
     const q = date ? `?date=${date}` : '';
-    return apiFetch(`/api/state${q}`, { method: 'GET' });
+    return apiGet(`/api/state${q}`);
 }
 
 /** GET /api/state?dates= — bulk effective modes for multiple dates */
@@ -129,7 +117,7 @@ export async function updateSettings(settings) {
     return apiPost('/api/updates', { type: 'updateSettings', ...settings });
 }
 
-/** GET /api/dev-secret — get secret from env, or {noAuth:true} if disabled */
+/** GET /api/dev-secret — get secret from env (local dev auto-auth) */
 export async function getDevSecret() {
     try {
         const res = await fetch('/api/dev-secret');
@@ -142,41 +130,24 @@ export async function getDevSecret() {
     }
 }
 
-/** GET /api/auth/check — setup status and session validity */
+/** GET /api/auth/check — check if PUNCH_SECRET is required */
 export async function authCheck() {
     try {
-        const res = await fetch('/api/auth/check', {
-            headers: _session ? { 'X-Session': _session } : {},
-        });
+        const res = await fetch('/api/auth/check');
         return await res.json();
     } catch {
         return { ok: false };
     }
 }
 
-/** POST /api/auth/register */
-export async function authRegister(username, password) {
-    const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-    });
-    return res.json();
-}
-
-/** POST /api/auth/login */
-export async function authLogin(username, password) {
-    const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-    });
-    return res.json();
-}
-
 /** POST /api/actions — send a Telegram test message */
 export async function testTelegram() {
     return apiPost('/api/actions', { action: 'testTelegram' });
+}
+
+/** POST /api/actions — clear a swap override for a specific date */
+export async function clearSwapOverride(date) {
+    return apiPost('/api/actions', { action: 'clearSwapOverride', date });
 }
 
 /** POST /api/actions — register Telegram webhook URL */

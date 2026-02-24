@@ -1,21 +1,22 @@
 // File: public/js/charts.js
 // Chart rendering utilities using HTML/CSS only (no external dependencies)
 
-export function renderMiniCalendar(records, currentDate) {
+export function renderMiniCalendar(records, currentDate, bulkState) {
     const date = new Date(currentDate);
     const year = date.getFullYear();
     const month = date.getMonth();
-    
+
     // Get first day of month and total days
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    
+
     // Create lookup map for records
     const recordMap = {};
     records.forEach(r => {
         recordMap[r.date] = r;
     });
-    
+    const byDate = (bulkState && bulkState.byDate) || {};
+
     let html = `
         <div class="mini-calendar">
             <div class="calendar-header">
@@ -38,31 +39,47 @@ export function renderMiniCalendar(records, currentDate) {
                 <div class="calendar-day-label">T6</div>
                 <div class="calendar-day-label">T7</div>
     `;
-    
+
     // Empty cells before first day
     for (let i = 0; i < firstDay; i++) {
         html += `<div class="calendar-cell empty"></div>`;
     }
-    
+
     // Days of month
     for (let day = 1; day <= daysInMonth; day++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const record = recordMap[dateStr];
+        const dayState = byDate[dateStr];
         const isToday = dateStr === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-        
+
         let cellClass = 'calendar-cell';
         let indicator = '';
-        
+        let modeBadge = '';
+
         if (isToday) cellClass += ' today';
-        
+
+        // Mode icon badge
+        if (dayState) {
+            const mode = dayState.effectiveMode || dayState.scheduleMode;
+            const isSwapped = dayState.modeOverride && dayState.modeOverride !== dayState.scheduleMode;
+            if (dayState.isOff || mode === 'off') {
+                modeBadge = `<span class="cell-mode off" title="OFF">OFF</span>`;
+            } else if (mode === 'wfh') {
+                modeBadge = `<span class="cell-mode wfh${isSwapped ? ' swapped' : ''}" title="${isSwapped ? 'Swapped to WFH' : 'WFH'}">H</span>`;
+            } else {
+                modeBadge = `<span class="cell-mode wio${isSwapped ? ' swapped' : ''}" title="${isSwapped ? 'Swapped to Office' : 'Office'}">O</span>`;
+            }
+        }
+
+        // Punch status indicator
         if (record) {
-            if (record.isOff) {
+            if (record.isOff || (record.day && record.day.isOff)) {
                 cellClass += ' off-day';
                 indicator = '<div class="cell-indicator bg-orange-500"></div>';
             } else {
                 const amOk = record.periods?.am?.status === 'success' || record.periods?.am?.status === 'manual_done';
                 const pmOk = record.periods?.pm?.status === 'success' || record.periods?.pm?.status === 'manual_done';
-                
+
                 if (amOk && pmOk) {
                     cellClass += ' success-day';
                     indicator = '<div class="cell-indicator bg-green-500"></div>';
@@ -75,20 +92,21 @@ export function renderMiniCalendar(records, currentDate) {
                 }
             }
         }
-        
+
         html += `
             <div class="${cellClass}" data-date="${dateStr}">
+                ${modeBadge}
                 <span class="cell-day">${day}</span>
                 ${indicator}
             </div>
         `;
     }
-    
+
     html += `
             </div>
         </div>
     `;
-    
+
     return html;
 }
 

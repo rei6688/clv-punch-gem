@@ -96,7 +96,7 @@ module.exports = async function handler(req, res) {
 
   } catch (e) {
     const msg = (e && e.message) || 'unknown error';
-    if (msg.includes('secret') || msg.includes('session')) return bad(403, msg);
+    if (msg.includes('secret')) return bad(403, msg);
     if (msg.includes('method not allowed')) return bad(405, msg);
     if (msg.includes('unsupported')) return bad(415, msg);
     if (msg.includes('missing') || msg.includes('invalid')) return bad(400, msg);

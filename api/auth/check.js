@@ -1,13 +1,12 @@
-// api/auth/check.js — returns setup status and auth state
-const { hasAnyUser, verifySession } = require('../../lib/users');
+// api/auth/check.js — returns whether PUNCH_SECRET is configured
+const { getSecret } = require('../../lib/auth');
 
-module.exports = async function handler(req, res) {
+module.exports = function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' });
 
-  const hasUser = await hasAnyUser();
-  if (!hasUser) return res.status(200).json({ ok: true, needsSetup: true });
-
-  const token = (req.headers['x-session'] || '').trim();
-  const valid = token ? await verifySession(token) : false;
-  return res.status(200).json({ ok: true, needsSetup: false, authenticated: valid });
+  const secret = getSecret();
+  // No PUNCH_SECRET → open access, no auth needed
+  if (!secret) return res.status(200).json({ ok: true, noAuth: true });
+  // PUNCH_SECRET is set → client needs to provide it
+  return res.status(200).json({ ok: true, needsSecret: true });
 };

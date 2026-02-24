@@ -499,13 +499,28 @@ async function renderDashboard(container) {
             API.getState(),
             API.getHistory(30)
         ]);
-        
+
         renderStatusGuide(data);
         globalState.historyRecords = historyData.records || [];
-        
+
         const { config, day, periods, date } = data;
         const { records } = historyData;
         const schedule = config.schedule || {}, times = config.times || { am: '08:30', noon: '13:30', pm: '20:00' };
+
+        // Fetch bulk state for calendar month (async, non-blocking)
+        let calendarBulkState = {};
+        const fetchMonthBulkState = async (monthDate) => {
+            const d = new Date(monthDate);
+            const y = d.getFullYear(), m = d.getMonth();
+            const days = new Date(y, m + 1, 0).getDate();
+            const dates = [];
+            for (let i = 1; i <= days; i++) dates.push(`${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`);
+            try {
+                const res = await API.getBulkState(dates);
+                return res;
+            } catch { return {}; }
+        };
+        calendarBulkState = await fetchMonthBulkState(date);
 
         // Calculate statistics
         const successRate = Utils.calculateSuccessRate(records);
@@ -635,7 +650,7 @@ async function renderDashboard(container) {
                 <!-- Mini calendar + recent activity below -->
                 <div class="border-t border-border grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border">
                     <div id="mini-calendar-container" class="p-1">
-                        ${Charts.renderMiniCalendar(records, date)}
+                        ${Charts.renderMiniCalendar(records, date, calendarBulkState)}
                     </div>
                     <div class="p-5">
                         <p class="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Recent Activity</p>
@@ -671,39 +686,104 @@ async function renderDashboard(container) {
         $('#qa-mark-pm').onclick = async () => { await API.markDone('pm', date); toast('PM Marked Done', 'success'); onHashChange(); };
 
         // Calendar navigation
-        $$('.calendar-nav').forEach(btn => {
-            btn.onclick = () => {
-                const nav = btn.dataset.nav;
-                if (nav === 'prev') {
-                    globalState.calendarMonth.setMonth(globalState.calendarMonth.getMonth() - 1);
-                } else {
-                    globalState.calendarMonth.setMonth(globalState.calendarMonth.getMonth() + 1);
-                }
-                $('#mini-calendar-container').innerHTML = Charts.renderMiniCalendar(records, globalState.calendarMonth.toISOString().split('T')[0]);
-                lucide.createIcons();
-                attachCalendarNavListeners(records);
-            };
-        });
+        const attachNavListeners = () => {
+            $$('.calendar-nav').forEach(btn => {
+                btn.onclick = () => {
+                    const nav = btn.dataset.nav;
+                    if (nav === 'prev') {
+                        globalState.calendarMonth.setMonth(globalState.calendarMonth.getMonth() - 1);
+                    } else {
+                        globalState.calendarMonth.setMonth(globalState.calendarMonth.getMonth() + 1);
+                    }
+                    rerenderCalendar();
+                };
+            });
+        };
+        const rerenderCalendar = async () => {
+            const monthStr = globalState.calendarMonth.toISOString().split('T')[0];
+            const bs = await fetchMonthBulkState(monthStr);
+            calendarBulkState = bs;
+            $('#mini-calendar-container').innerHTML = Charts.renderMiniCalendar(records, monthStr, bs);
+            lucide.createIcons();
+            attachNavListeners();
+            attachCalendarCellListeners(records, calendarBulkState);
+        };
+        attachNavListeners();
+
+        // Calendar cell click: show detail popup
+        const dayLabelsPopup = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+        function attachCalendarCellListeners(recs, bulkSt) {
+            const recMap = {};
+            recs.forEach(r => { recMap[r.date] = r; });
+            const byDate = (bulkSt && bulkSt.byDate) || {};
+
+            $$('.calendar-cell[data-date]').forEach(cell => {
+                cell.onclick = (e) => {
+                    e.stopPropagation();
+                    // Remove existing popup
+                    const existing = document.querySelector('.calendar-popup');
+                    if (existing) existing.remove();
+
+                    const dt = cell.dataset.date;
+                    const rec = recMap[dt];
+                    const st = byDate[dt];
+                    const d = new Date(dt + 'T00:00:00+07:00');
+                    const dayLabel = dayLabelsPopup[d.getDay()];
+                    const dd = dt.split('-');
+
+                    // Mode info
+                    let modeHtml = '';
+                    if (st) {
+                        const mode = st.effectiveMode || st.scheduleMode || '—';
+                        const isSwapped = st.modeOverride && st.modeOverride !== st.scheduleMode;
+                        const modeText = mode === 'wfh' ? 'WFH' : mode === 'off' ? 'OFF' : 'Office';
+                        const modeColor = mode === 'wfh' ? 'text-primary' : mode === 'off' ? 'text-orange-500' : 'text-muted-foreground';
+                        modeHtml = `<div class="popup-row"><span>Mode</span><span class="font-black ${modeColor}">${modeText}${isSwapped ? ' <span class="text-amber-500">(swapped)</span>' : ''}</span></div>`;
+                    }
+
+                    // Period info
+                    const periodHtml = (label, p) => {
+                        if (!p) return `<div class="popup-row"><span>${label}</span><span class="text-muted-foreground">—</span></div>`;
+                        const s = p.status;
+                        const time = p.recordedPunchTime || '';
+                        const icon = s === 'success' || s === 'manual_done' ? '<span class="text-green-500 font-black">OK</span>' : s === 'fail' ? '<span class="text-red-500 font-black">FAIL</span>' : '<span class="text-muted-foreground">Pending</span>';
+                        return `<div class="popup-row"><span>${label}</span><span>${icon}${time ? ' <span class="text-muted-foreground">' + time + '</span>' : ''}</span></div>`;
+                    };
+                    const amP = rec?.periods?.am;
+                    const pmP = rec?.periods?.pm;
+
+                    // OFF info
+                    const isOff = rec?.isOff || (rec?.day && rec.day.isOff) || (st && st.isOff);
+
+                    const popup = document.createElement('div');
+                    popup.className = 'calendar-popup';
+                    popup.innerHTML = `
+                        <div class="popup-header">
+                            <span>${dayLabel} ${dd[2]}/${dd[1]}/${dd[0]}</span>
+                            ${isOff ? '<span class="text-[9px] font-black px-2 py-0.5 rounded bg-orange-500/10 text-orange-500">OFF</span>' : ''}
+                        </div>
+                        ${modeHtml}
+                        ${!isOff ? periodHtml('AM Punch', amP) : ''}
+                        ${!isOff ? periodHtml('PM Punch', pmP) : ''}
+                    `;
+
+                    // Position popup near the clicked cell
+                    const rect = cell.getBoundingClientRect();
+                    popup.style.top = `${rect.bottom + 6}px`;
+                    popup.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 250))}px`;
+                    document.body.appendChild(popup);
+
+                    // Dismiss on click outside
+                    const dismiss = (ev) => { if (!popup.contains(ev.target) && ev.target !== cell) { popup.remove(); document.removeEventListener('click', dismiss); } };
+                    setTimeout(() => document.addEventListener('click', dismiss), 10);
+                };
+            });
+        }
+        attachCalendarCellListeners(records, calendarBulkState);
 
     } catch (e) { 
         container.innerHTML = `<p class="p-20 text-center font-bold text-red-500">${e.message}</p>`; 
     }
-}
-
-function attachCalendarNavListeners(records) {
-    $$('.calendar-nav').forEach(btn => {
-        btn.onclick = () => {
-            const nav = btn.dataset.nav;
-            if (nav === 'prev') {
-                globalState.calendarMonth.setMonth(globalState.calendarMonth.getMonth() - 1);
-            } else {
-                globalState.calendarMonth.setMonth(globalState.calendarMonth.getMonth() + 1);
-            }
-            $('#mini-calendar-container').innerHTML = Charts.renderMiniCalendar(records, globalState.calendarMonth.toISOString().split('T')[0]);
-            lucide.createIcons();
-            attachCalendarNavListeners(records);
-        };
-    });
 }
 
 function startCountdownTimer(amTime, pmTime) {
@@ -1169,6 +1249,19 @@ async function renderSettings(container) {
                 </div>
             </div>
 
+            <!-- Active Swap Overrides -->
+            <div class="settings-section">
+                <div class="settings-header">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center"><i data-lucide="repeat-2" class="w-5 h-5"></i></div>
+                        <div><p class="font-black">Active Swap Overrides</p><p class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Per-date overrides (not affecting default schedule)</p></div>
+                    </div>
+                </div>
+                <div id="swap-overrides-list" class="settings-content">
+                    <p class="text-xs text-muted-foreground text-center py-4">Loading...</p>
+                </div>
+            </div>
+
             <!-- Config Import/Export -->
             <div class="settings-section">
                 <div class="settings-header">
@@ -1246,6 +1339,76 @@ async function renderSettings(container) {
             btn.textContent = 'Commit Cycle';
         }
     };
+
+    // ── Load Active Swap Overrides ──────────────────────────
+    const dayLabels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    const loadSwapOverrides = async () => {
+        const container = $('#swap-overrides-list');
+        try {
+            // Fetch next 30 days
+            const dates = [];
+            const now = new Date();
+            for (let i = -7; i < 30; i++) {
+                const d = new Date(now); d.setDate(d.getDate() + i);
+                dates.push(d.toISOString().split('T')[0]);
+            }
+            const res = await API.getBulkState(dates);
+            const overrides = [];
+            if (res.byDate) {
+                for (const [dt, info] of Object.entries(res.byDate)) {
+                    if (info.modeOverride) {
+                        overrides.push({ date: dt, from: info.scheduleMode, to: info.modeOverride });
+                    }
+                }
+            }
+            overrides.sort((a, b) => a.date.localeCompare(b.date));
+
+            if (overrides.length === 0) {
+                container.innerHTML = '<p class="text-xs text-muted-foreground text-center py-4">No active swaps</p>';
+                return;
+            }
+
+            const modeBadge = (m) => m === 'wfh'
+                ? '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-primary/10 text-primary">WFH</span>'
+                : m === 'off'
+                ? '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-orange-500/10 text-orange-500">OFF</span>'
+                : '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-muted text-muted-foreground">OFFICE</span>';
+
+            container.innerHTML = `<div class="space-y-2">${overrides.map(o => {
+                const d = new Date(o.date + 'T00:00:00+07:00');
+                const dayLabel = dayLabels[d.getDay()];
+                const dd = o.date.split('-');
+                const dateStr = `${dayLabel} ${dd[2]}/${dd[1]}`;
+                return `<div class="flex items-center justify-between p-3 rounded-xl bg-muted/50 border border-border/50">
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-bold w-16">${dateStr}</span>
+                        <div class="flex items-center gap-1.5">
+                            ${modeBadge(o.from)}
+                            <i data-lucide="arrow-right" class="w-3 h-3 text-muted-foreground"></i>
+                            ${modeBadge(o.to)}
+                        </div>
+                    </div>
+                    <button class="swap-clear-btn text-[9px] font-black px-2 py-1 rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors" data-date="${o.date}">Clear</button>
+                </div>`;
+            }).join('')}</div>`;
+            lucide.createIcons();
+
+            $$('.swap-clear-btn').forEach(btn => {
+                btn.onclick = async () => {
+                    btn.disabled = true; btn.textContent = '...';
+                    try {
+                        await API.clearSwapOverride(btn.dataset.date);
+                        toast(`Swap cleared: ${btn.dataset.date}`, 'success');
+                        loadSwapOverrides();
+                    } catch (e) { toast('Clear failed: ' + e.message, 'error'); btn.disabled = false; btn.textContent = 'Clear'; }
+                };
+            });
+        } catch (e) {
+            container.innerHTML = `<p class="text-xs text-red-500 text-center py-4">${e.message}</p>`;
+        }
+    };
+    loadSwapOverrides();
+
     $('#save-telegram').onclick = async () => {
         const btn = $('#save-telegram');
         btn.disabled = true; btn.textContent = 'Syncing...';
@@ -1353,36 +1516,30 @@ function onHashChange() {
     routes[page](c).catch(e => { c.innerHTML = `<p class="p-20 text-center font-bold text-red-500">${e.message}</p>`; });
 }
 
-// ── Auth forms (register / login) ────────────────────────────
-function showAuthForm(mode) {
-    const isRegister = mode === 'register';
+// ── Secret input form (first visit on prod) ──────────────────
+function showSecretForm() {
     const root = $('#modal-root');
     root.innerHTML = `<div class="modal-overlay animate-in"><div class="modal-content !max-w-sm space-y-5">
         <div class="text-center">
-            <h2 class="text-xl font-black">${isRegister ? 'Create Account' : 'Sign In'}</h2>
+            <h2 class="text-xl font-black">Punch Secret</h2>
             <p class="text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-1">
-                ${isRegister ? 'First-time setup — create your account' : 'Enter your credentials'}
+                Enter your PUNCH_SECRET to continue
             </p>
         </div>
-        <div class="space-y-3">
-            <input type="text"     id="auth-user" class="input w-full" placeholder="Username" autocomplete="username" spellcheck="false">
-            <div class="relative">
-                <input type="password" id="auth-pass" class="input w-full pr-10" placeholder="Password" autocomplete="${isRegister ? 'new-password' : 'current-password'}">
-                <button id="auth-eye" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                    <svg id="auth-eye-icon" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-                </button>
-            </div>
+        <div class="relative">
+            <input type="password" id="auth-secret" class="input w-full pr-10" placeholder="PUNCH_SECRET" autocomplete="off" spellcheck="false">
+            <button id="auth-eye" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <svg id="auth-eye-icon" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
         </div>
         <div id="auth-error" class="hidden text-[11px] text-destructive font-medium text-center"></div>
-        <button id="auth-submit" class="btn btn-primary w-full shadow-lg shadow-primary/20">
-            ${isRegister ? 'Create Account' : 'Sign In'}
-        </button>
-        ${!isRegister ? '' : '<p class="text-[10px] text-center text-muted-foreground">You can register multiple accounts later in Settings</p>'}
+        <button id="auth-submit" class="btn btn-primary w-full shadow-lg shadow-primary/20">Unlock</button>
+        <p class="text-[10px] text-center text-muted-foreground">Set PUNCH_SECRET in Vercel Environment Variables</p>
     </div></div>`;
 
     // Eye toggle
     $('#auth-eye').onclick = () => {
-        const inp = $('#auth-pass');
+        const inp = $('#auth-secret');
         inp.type = inp.type === 'password' ? 'text' : 'password';
         $('#auth-eye-icon').innerHTML = inp.type === 'text'
             ? '<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/>'
@@ -1391,39 +1548,29 @@ function showAuthForm(mode) {
 
     const errEl = $('#auth-error');
     const submit = async () => {
-        const u = $('#auth-user').value.trim();
-        const p = $('#auth-pass').value;
-        if (!u || !p) { errEl.classList.remove('hidden'); errEl.textContent = 'Please fill both fields.'; return; }
+        const s = $('#auth-secret').value.trim();
+        if (!s) { errEl.classList.remove('hidden'); errEl.textContent = 'Please enter your secret.'; return; }
 
         errEl.classList.add('hidden');
         $('#auth-submit').disabled = true;
-        $('#auth-submit').textContent = isRegister ? 'Creating…' : 'Signing in…';
+        $('#auth-submit').textContent = 'Verifying…';
         try {
-            let res;
-            if (isRegister) {
-                res = await API.authRegister(u, p);
-                if (!res.ok) throw new Error(res.error);
-                // Register now returns token directly — no separate login needed
-            } else {
-                res = await API.authLogin(u, p);
-            }
-            if (!res.ok) throw new Error(res.error);
-            if (!res.token) throw new Error('No session token returned');
-            API.setSession(res.token);
+            API.setSecret(s);
+            // Test the secret by calling an API endpoint
+            await API.getState();
             location.reload();
         } catch (e) {
+            API.clearSecret();
             errEl.classList.remove('hidden');
-            errEl.textContent = e.message;
+            errEl.textContent = e.message === 'AUTH_FAIL' ? 'Invalid secret' : e.message;
             $('#auth-submit').disabled = false;
-            $('#auth-submit').textContent = isRegister ? 'Create Account' : 'Sign In';
+            $('#auth-submit').textContent = 'Unlock';
         }
     };
 
     $('#auth-submit').onclick = submit;
-    ['auth-user', 'auth-pass'].forEach(id => {
-        $('#' + id).onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
-    });
-    setTimeout(() => $('#auth-user') && $('#auth-user').focus(), 100);
+    $('#auth-secret').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
+    setTimeout(() => $('#auth-secret') && $('#auth-secret').focus(), 100);
 }
 
 async function boot() {
@@ -1453,23 +1600,33 @@ async function boot() {
     }; });
 
     // ── Auth gate ─────────────────────────────────────────────
-    const authStatus = await API.authCheck();
-
-    // Already authenticated via session token
-    if (authStatus.authenticated) {
-        // good — fall through to dashboard
-    }
-    // First-time setup: no user registered yet
-    else if (authStatus.needsSetup) {
-        showAuthForm('register');
-        return;
-    }
-    // Has valid session check but not authenticated, or check failed → show login
-    else {
-        API.clearSecret();
-        API.clearSession();
-        showAuthForm('login');
-        return;
+    // Local dev: auto-get secret from .env via /api/dev-secret
+    if (!API.hasSecret()) {
+        const devResult = await API.getDevSecret();
+        if (devResult && devResult.noAuth) {
+            // No PUNCH_SECRET configured → open access
+        } else if (devResult && typeof devResult === 'string') {
+            // Local dev: got secret from .env
+            API.setSecret(devResult);
+        } else {
+            // Prod: check if PUNCH_SECRET is required
+            const check = await API.authCheck();
+            if (check.needsSecret) {
+                showSecretForm();
+                return;
+            }
+        }
+    } else {
+        // Has saved secret — verify it still works
+        try {
+            await API.getState();
+        } catch (e) {
+            if (e.message === 'AUTH_FAIL') {
+                API.clearSecret();
+                showSecretForm();
+                return;
+            }
+        }
     }
 
     window.onhashchange = onHashChange;

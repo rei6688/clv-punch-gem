@@ -2,7 +2,7 @@
 // Routes by 'action' query parameter or body field
 
 const { setPeriodState, setIsOff, setIsOffRange, setDayModeOverride, getTelegramConfig, kv } = require('../lib/kv');
-const { saveSwapOverride } = require('../lib/db');
+const { saveSwapOverride, deleteSwapOverride } = require('../lib/db');
 const { sendChat } = require('../lib/chat');
 const { getVietnamDateKey, getCurrentPeriod } = require('../lib/time');
 const { authenticate } = require('../lib/auth');
@@ -192,6 +192,25 @@ const handlers = {
     return ok({ date: dateKey, isOff: false });
   },
 
+  async clearSwapOverride(req, res, rid) {
+    const ok = (data = {}) => res.status(200).json({ ok: true, requestId: rid, ...data });
+    const bad = (code, msg) => res.status(code).json({ ok: false, error: msg, requestId: rid });
+
+    const { date } = req.body;
+    if (!date || !String(date).match(/^\d{4}-\d{2}-\d{2}$/)) return bad(400, 'invalid or missing date');
+
+    // Clear KV override (passing null deletes it)
+    await setDayModeOverride(date, null);
+    // Clear DB override
+    try {
+      await deleteSwapOverride(date);
+    } catch (dbErr) {
+      console.warn('[clearSwapOverride] DB delete skipped:', dbErr.message);
+    }
+
+    return ok({ date, cleared: true });
+  },
+
   async testTelegram(req, res, rid) {
     const ok = (data = {}) => res.status(200).json({ ok: true, requestId: rid, ...data });
     const bad = (code, msg) => res.status(code).json({ ok: false, error: msg, requestId: rid });
@@ -255,7 +274,7 @@ module.exports = async function handler(req, res) {
 
   } catch (e) {
     const msg = (e && e.message) || 'unknown error';
-    if (msg.includes('secret') || msg.includes('session')) return bad(403, msg);
+    if (msg.includes('secret')) return bad(403, msg);
     if (msg.includes('method not allowed')) return bad(405, msg);
     if (msg.includes('unsupported')) return bad(415, msg);
     if (msg.includes('invalid')) return bad(400, msg);

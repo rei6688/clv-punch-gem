@@ -43,7 +43,7 @@ module.exports = async function handler(req, res) {
 
   } catch (e) {
     const msg = (e && e.message) || 'unknown error';
-    if (msg.includes('secret') || msg.includes('session')) return bad(403, msg);
+    if (msg.includes('secret')) return bad(403, msg);
     return bad(500, 'server error', { detail: msg });
   }
 }
