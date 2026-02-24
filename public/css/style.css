@@ -671,9 +671,9 @@ nav {
   padding: 1px 2px;
   border-radius: 2px;
   letter-spacing: 0.02em;
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  transition: all 0.2s ease;
 }
 .cell-badge {
   display: inline;

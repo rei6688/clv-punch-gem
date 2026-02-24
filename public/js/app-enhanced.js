@@ -44,13 +44,20 @@ function toast(msg, type = 'info') {
 
 function statusBadge(status, source) {
     let cls = "badge-pending", icon = "clock", text = "Pending";
-    if (status === 'success') { 
-        cls = "badge-success"; 
-        icon = "check-circle"; 
-        text = source === 'gha' || source === 'cron-reset' ? "Auto" : "Success"; 
+    const isManual = status === 'manual_done' || source === 'api' || source === 'telegram';
+
+    if (status === 'success' || status === 'manual_done') {
+        if (isManual) {
+            cls = "badge-success !bg-blue-500/10 !text-blue-600 !border-blue-500/20";
+            icon = "check";
+            text = "Manual";
+        } else {
+            cls = "badge-success";
+            icon = "check-circle";
+            text = (source === 'gha' || source === 'cron-reset' || source === 'auto') ? "Auto" : "Success";
+        }
     }
     else if (status === 'fail') { cls = "badge-fail"; icon = "x-circle"; text = "Failed"; }
-    else if (status === 'manual_done') { cls = "badge-success !bg-blue-500/10 !text-blue-600 !border-blue-500/20"; icon = "check"; text = "Manual"; }
     return `<span class="badge ${cls}"><i data-lucide="${icon}" class="w-3 h-3"></i>${text}</span>`;
 }
 
@@ -301,8 +308,8 @@ function showSwapDayModal(schedule = {}) {
         const icon = selected
             ? `<i data-lucide="check" class="w-2.5 h-2.5 text-primary mt-0.5"></i>`
             : isWeekendOff
-            ? `<i data-lucide="plus" class="w-2.5 h-2.5 text-orange-400 mt-0.5"></i>`
-            : `<span class="h-3"></span>`;
+                ? `<i data-lucide="plus" class="w-2.5 h-2.5 text-orange-400 mt-0.5"></i>`
+                : `<span class="h-3"></span>`;
 
         // Show effectiveMode as current badge (reflects KV override)
         const displayMode = (isWeekendOff && !hasOverride) ? 'off' : d.effectiveMode;
@@ -498,7 +505,7 @@ function showSwapDayModal(schedule = {}) {
 async function renderDashboard(container) {
     try {
         showSkeleton(container);
-        
+
         const [data, historyData] = await Promise.all([
             API.getState(),
             API.getHistory(30)
@@ -518,7 +525,7 @@ async function renderDashboard(container) {
             const y = d.getFullYear(), m = d.getMonth();
             const days = new Date(y, m + 1, 0).getDate();
             const dates = [];
-            for (let i = 1; i <= days; i++) dates.push(`${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`);
+            for (let i = 1; i <= days; i++) dates.push(`${y}-${String(m + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`);
             try {
                 const res = await API.getBulkState(dates);
                 return res;
@@ -700,9 +707,9 @@ async function renderDashboard(container) {
                 </div>
             </div>
         </div>`;
-        
+
         lucide.createIcons();
-        
+
         // Animate stat values
         $$('.stat-value').forEach(el => {
             const value = parseInt(el.dataset.value || el.textContent);
@@ -720,36 +727,36 @@ async function renderDashboard(container) {
             const tomorrow = new Date(date + 'T00:00:00+07:00');
             tomorrow.setDate(tomorrow.getDate() + 1);
             const tomorrowDate = tomorrow.toISOString().split('T')[0];
-            
+
             try {
                 const res = await API.getBulkState([tomorrowDate]);
                 const tomorrowState = res.byDate && res.byDate[tomorrowDate];
-                
+
                 if (tomorrowState) {
                     const scheduleMode = tomorrowState.scheduleMode || 'unknown';
                     const modeOverride = tomorrowState.modeOverride;
                     const effectiveMode = tomorrowState.effectiveMode || scheduleMode;
                     const isSwapped = modeOverride && modeOverride !== scheduleMode;
-                    
+
                     const modeBadge = (m) => {
                         if (m === 'wfh') return '<i data-lucide="laptop" class="w-4 h-4 inline text-primary mr-1"></i><span>WFH</span>';
                         if (m === 'off') return '<i data-lucide="moon" class="w-4 h-4 inline text-orange-500 mr-1"></i><span>OFF</span>';
                         return '<i data-lucide="building-2" class="w-4 h-4 inline mr-1"></i><span>Office</span>';
                     };
-                    
+
                     let html = `
                         <div class="flex items-center justify-between">
                             <span class="text-[10px] font-bold text-muted-foreground/70">Default Schedule</span>
                             <span class="text-sm font-black">${modeBadge(scheduleMode)}</span>
                         </div>`;
-                    
+
                     if (isSwapped) {
                         html += `<div class="flex items-center justify-between">
                             <span class="text-[10px] font-bold text-amber-600/70">Active Override</span>
                             <span class="text-sm font-black text-amber-600">${modeBadge(modeOverride)}</span>
                         </div>`;
                     }
-                    
+
                     $('#tomorrow-content').innerHTML = html;
                     lucide.createIcons();
                 }
@@ -895,8 +902,8 @@ async function renderDashboard(container) {
         }
         attachCalendarCellListeners(records, calendarBulkState);
 
-    } catch (e) { 
-        container.innerHTML = `<p class="p-20 text-center font-bold text-red-500">${e.message}</p>`; 
+    } catch (e) {
+        container.innerHTML = `<p class="p-20 text-center font-bold text-red-500">${e.message}</p>`;
     }
 }
 
@@ -908,10 +915,10 @@ function startCountdownTimer(amTime, pmTime) {
     const updateCountdown = () => {
         const now = Utils.getVietnamTime();
         const currentHour = now.getHours();
-        
+
         let targetTime = amTime;
         let label = 'Next Punch In';
-        
+
         if (currentHour >= 13) {
             targetTime = pmTime;
             label = 'Next Punch Out';
@@ -919,16 +926,16 @@ function startCountdownTimer(amTime, pmTime) {
             targetTime = pmTime;
             label = 'Next Punch Out';
         }
-        
+
         const countdown = Utils.getTimeUntil(targetTime);
-        
+
         $('#cd-hours').textContent = String(countdown.hours).padStart(2, '0');
         $('#cd-minutes').textContent = String(countdown.minutes).padStart(2, '0');
         $('#cd-seconds').textContent = String(countdown.seconds).padStart(2, '0');
-        
+
         const labelEl = $('.countdown-label');
         if (labelEl) labelEl.textContent = label;
-        
+
         const targetEl = $('.countdown-target');
         if (targetEl) targetEl.textContent = `Target: ${targetTime}`;
     };
@@ -981,7 +988,7 @@ async function renderHistory(container) {
 
     const historyData = await API.getHistory(90);
     const { records } = historyData;
-    
+
     globalState.historyRecords = records;
 
     container.innerHTML = `
@@ -1104,22 +1111,22 @@ async function renderHistory(container) {
                 </div>
             </div>
         </div>`;
-    
+
     lucide.createIcons();
-    
+
     let displayCount = 15;
     let filteredRecords = records;
 
     const updateHistoryStats = (recs) => {
         let successCount = 0, failCount = 0, totalTime = 0, timeCount = 0;
-        
+
         recs.forEach(r => {
             ['am', 'pm'].forEach(period => {
                 if (r.periods?.[period]) {
                     const status = r.periods[period].status;
                     if (status === 'success' || status === 'manual_done') successCount++;
                     if (status === 'fail') failCount++;
-                    
+
                     if (r.periods[period].recordedPunchTime) {
                         const mins = Utils.timeToMinutes(r.periods[period].recordedPunchTime);
                         totalTime += mins;
@@ -1141,7 +1148,7 @@ async function renderHistory(container) {
     const renderHistoryList = () => {
         const list = $('#hist-list');
         const toDisplay = filteredRecords.slice(0, displayCount);
-        
+
         if (!toDisplay.length) {
             list.innerHTML = `<div class="card !border-dashed text-center opacity-40 font-bold py-20">No logs found</div>`;
             return;
@@ -1151,7 +1158,7 @@ async function renderHistory(container) {
             const am = r.periods.am || { status: 'pending' }, pm = r.periods.pm || { status: 'pending' };
             const isLateAM = am.recordedPunchTime && Utils.timeToMinutes(am.recordedPunchTime) > Utils.timeToMinutes('08:30');
             const isLatePM = pm.recordedPunchTime && Utils.timeToMinutes(pm.recordedPunchTime) > Utils.timeToMinutes('20:00');
-            
+
             return `
             <div class="timeline-item group hover:border-primary/20 transition-all ${r.isOff ? 'opacity-50' : ''}">
                 <div class="flex flex-col">
@@ -1180,9 +1187,9 @@ async function renderHistory(container) {
                 </div>
             </div>`;
         }).join('');
-        
+
         lucide.createIcons();
-        
+
         const loadMoreBtn = $('#load-more');
         if (loadMoreBtn) {
             loadMoreBtn.style.display = displayCount >= filteredRecords.length ? 'none' : 'flex';
@@ -1229,8 +1236,8 @@ async function renderHistory(container) {
             const modeBadge = (m) => m === 'wfh'
                 ? '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-primary/10 text-primary"><i data-lucide="laptop" class="w-3 h-3"></i>WFH</span>'
                 : m === 'off'
-                ? '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-orange-500/10 text-orange-500"><i data-lucide="moon" class="w-3 h-3"></i>OFF</span>'
-                : '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-muted text-muted-foreground"><i data-lucide="building-2" class="w-3 h-3"></i>OFFICE</span>';
+                    ? '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-orange-500/10 text-orange-500"><i data-lucide="moon" class="w-3 h-3"></i>OFF</span>'
+                    : '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-muted text-muted-foreground"><i data-lucide="building-2" class="w-3 h-3"></i>OFFICE</span>';
 
             changesList.innerHTML = events.events.map(ev => {
                 const data = ev.event_data ? (typeof ev.event_data === 'string' ? JSON.parse(ev.event_data) : ev.event_data) : {};
@@ -1240,7 +1247,7 @@ async function renderHistory(container) {
                 const timestamp = new Date(ev.created_at * 1000 || ev.created_at);
                 const timeStr = timestamp.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
                 const dateStr = timestamp.toLocaleDateString('vi-VN', { weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit' });
-                
+
                 return `<div class="timeline-item group hover:border-amber-500/20 transition-all">
                     <div class="flex flex-col">
                         <span class="text-[9px] font-black uppercase opacity-30">${dateStr.split(',')[0]}</span>
@@ -1273,7 +1280,7 @@ async function renderHistory(container) {
     tabs.forEach(tab => {
         tab.onclick = () => {
             const tabName = tab.dataset.tab;
-            
+
             // Update tab active state
             tabs.forEach(t => {
                 t.classList.remove('border-primary', 'text-primary');
@@ -1301,7 +1308,7 @@ async function renderHistory(container) {
     $('#hist-range').onchange = applyFilters;
     $('#status-filter').onchange = applyFilters;
     $('#search-input').oninput = Utils.debounce(applyFilters, 300);
-    
+
     $('#load-more').onclick = () => {
         displayCount += 15;
         renderHistoryList();
@@ -1444,16 +1451,15 @@ async function renderSettings(container) {
         const modeDesc = val === 'wfh'
             ? '<span class="text-primary">WFH</span> — Hệ thống tự động Punch'
             : val === 'off'
-            ? '<span class="text-orange-500">Nghỉ</span> — Hệ thống không chạy'
-            : '<span class="text-foreground">Văn Phòng</span> — Vào VP check-in thủ công';
+                ? '<span class="text-orange-500">Nghỉ</span> — Hệ thống không chạy'
+                : '<span class="text-foreground">Văn Phòng</span> — Vào VP check-in thủ công';
         return `
                         <div class="flex items-center justify-between p-3.5 rounded-xl hover:bg-muted/30 transition-all group" id="sched-row-${day}">
                             <div class="flex items-center gap-3 min-w-0">
-                                <div class="sched-row-icon w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                    val === 'wfh' ? 'bg-primary/10 text-primary' :
-                                    val === 'off' ? 'bg-orange-500/10 text-orange-500' :
-                                    'bg-muted text-muted-foreground'
-                                }" data-day="${day}">
+                                <div class="sched-row-icon w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${val === 'wfh' ? 'bg-primary/10 text-primary' :
+                val === 'off' ? 'bg-orange-500/10 text-orange-500' :
+                    'bg-muted text-muted-foreground'
+            }" data-day="${day}">
                                     <i data-lucide="${modeIcon}" class="w-4 h-4"></i>
                                 </div>
                                 <div class="min-w-0">
@@ -1542,9 +1548,8 @@ async function renderSettings(container) {
         // Update row icon
         const icon = $(`.sched-row-icon[data-day="${d}"]`);
         if (icon) {
-            icon.className = `sched-row-icon w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                v === 'wfh' ? 'bg-primary/10 text-primary' : v === 'off' ? 'bg-orange-500/10 text-orange-500' : 'bg-muted text-muted-foreground'
-            }`;
+            icon.className = `sched-row-icon w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${v === 'wfh' ? 'bg-primary/10 text-primary' : v === 'off' ? 'bg-orange-500/10 text-orange-500' : 'bg-muted text-muted-foreground'
+                }`;
             icon.dataset.day = d;
             icon.innerHTML = `<i data-lucide="${modeIconMap[v]}" class="w-4 h-4"></i>`;
             lucide.createIcons({ nodes: [icon] });
@@ -1600,8 +1605,8 @@ async function renderSettings(container) {
             const modeBadge = (m) => m === 'wfh'
                 ? '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-primary/10 text-primary">WFH</span>'
                 : m === 'off'
-                ? '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-orange-500/10 text-orange-500">OFF</span>'
-                : '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-muted text-muted-foreground">OFFICE</span>';
+                    ? '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-orange-500/10 text-orange-500">OFF</span>'
+                    : '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-muted text-muted-foreground">OFFICE</span>';
 
             container.innerHTML = `<div class="space-y-2">${overrides.map(o => {
                 const d = new Date(o.date + 'T00:00:00+07:00');
@@ -1680,7 +1685,7 @@ async function renderSettings(container) {
         } catch (e) { toast('Save failed: ' + e.message, 'error'); }
         finally { btn.disabled = false; btn.textContent = 'Save Rules'; }
     };
-    
+
     // Config Export/Import
     $('#export-config').onclick = () => {
         const config = { schedule: currentSchedule, telegram, times: finalTimes };
@@ -1690,26 +1695,26 @@ async function renderSettings(container) {
     };
 
     $('#import-config').onclick = () => $('#config-file-input').click();
-    
+
     $('#config-file-input').onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        
+
         try {
             const text = await file.text();
             const config = JSON.parse(text);
-            
+
             if (config.schedule) await API.updateSchedule(config.schedule);
             if (config.telegram) await API.updateSettings({ telegram: config.telegram });
             if (config.times) await API.updateSettings({ times: config.times });
-            
+
             toast('Config Imported Successfully', 'success');
             setTimeout(() => onHashChange(), 1000);
         } catch (err) {
             toast('Import Failed: ' + err.message, 'error');
         }
     };
-    
+
     $('#s-theme-btn').onclick = () => { document.documentElement.classList.toggle('dark'); localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light'); };
     $('#s-purge-local').onclick = () => { API.clearSecret(); location.reload(); };
 }
@@ -1737,9 +1742,9 @@ function onHashChange() {
     const hash = window.location.hash.replace('#', '') || 'dashboard';
     const page = routes[hash] ? hash : 'dashboard';
     globalState.currentPage = page;
-    
+
     $$('.nav-tab').forEach(t => t.dataset.page === page ? t.classList.add('active') : t.classList.remove('active'));
-    
+
     const c = $('#app');
     c.innerHTML = `<div class="flex items-center justify-center p-20 opacity-40"><div class="w-6 h-6 border-2 border-foreground border-t-transparent rounded-full animate-spin"></div></div>`;
     routes[page](c).catch(e => { c.innerHTML = `<p class="p-20 text-center font-bold text-red-500">${e.message}</p>`; });
@@ -1821,12 +1826,14 @@ async function boot() {
         localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
     };
 
-    $$('.nav-tab').forEach(t => { t.onclick = () => {
-        // Immediately mark active without waiting for render
-        $$('.nav-tab').forEach(b => b.classList.remove('active'));
-        t.classList.add('active');
-        if (window.location.hash === `#${t.dataset.page}`) onHashChange(); else window.location.hash = t.dataset.page;
-    }; });
+    $$('.nav-tab').forEach(t => {
+        t.onclick = () => {
+            // Immediately mark active without waiting for render
+            $$('.nav-tab').forEach(b => b.classList.remove('active'));
+            t.classList.add('active');
+            if (window.location.hash === `#${t.dataset.page}`) onHashChange(); else window.location.hash = t.dataset.page;
+        };
+    });
 
     // ── Auth gate ─────────────────────────────────────────────
     // Local dev: auto-get secret from .env via /api/dev-secret
@@ -1860,11 +1867,11 @@ async function boot() {
 
     window.onhashchange = onHashChange;
     onHashChange();
-    
+
     // Clock update
-    setInterval(() => { 
-        const el = $('#nav-clock'); 
-        if (el) el.textContent = new Date().toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false }) + ' VN'; 
+    setInterval(() => {
+        const el = $('#nav-clock');
+        if (el) el.textContent = new Date().toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false }) + ' VN';
     }, 1000);
 
     // Register keyboard shortcuts
