@@ -2,7 +2,7 @@
 // Routes by 'action' query parameter or body field
 
 const { setPeriodState, setIsOff, setIsOffRange, setDayModeOverride, getTelegramConfig, kv } = require('../lib/kv');
-const { saveSwapOverride, deleteSwapOverride } = require('../lib/db');
+const { saveSwapOverride, deleteSwapOverride, logSystemEvent } = require('../lib/db');
 const { sendChat } = require('../lib/chat');
 const { getVietnamDateKey, getCurrentPeriod } = require('../lib/time');
 const { authenticate } = require('../lib/auth');
@@ -87,11 +87,13 @@ const handlers = {
       await setIsOffRange(startDate, endDate, isOff);
       chatTitle = isOff ? `🚫 Đã đánh dấu OFF dải ngày` : `✅ Đã xóa OFF dải ngày`;
       chatMsg = `${startDate} đến ${endDate}. Hệ thống sẽ ${isOff ? 'KHÔNG chạy' : 'hoạt động lại'}.`;
+      await logSystemEvent('toggle_off', { startDate, endDate, isOff }, 'api').catch(err => console.warn('[markOff] event log skipped:', err.message));
     } else {
       const dateKey = date || getVietnamDateKey();
       await setIsOff(dateKey, isOff);
       chatTitle = isOff ? `🚫 Đã đánh dấu OFF: ${dateKey}` : `✅ Đã xóa OFF: ${dateKey}`;
       chatMsg = `Cách ngày này, hệ thống sẽ ${isOff ? 'KHÔNG chạy' : 'hoạt động lại bình thường'}.`;
+      await logSystemEvent('toggle_off', { date: dateKey, isOff }, 'api').catch(err => console.warn('[markOff] event log skipped:', err.message));
     }
 
     await sendChat({
@@ -135,6 +137,7 @@ const handlers = {
     await setDayModeOverride(dateKey, toMode);
     try {
       await saveSwapOverride(dateKey, toMode);
+      await logSystemEvent('swap_day', { date: dateKey, toMode }, 'api');
     } catch (dbErr) {
       console.warn('[swapDay] DB persist skipped:', dbErr.message);
     }
@@ -204,6 +207,7 @@ const handlers = {
     // Clear DB override
     try {
       await deleteSwapOverride(date);
+      await logSystemEvent('clear_override', { date }, 'api');
     } catch (dbErr) {
       console.warn('[clearSwapOverride] DB delete skipped:', dbErr.message);
     }

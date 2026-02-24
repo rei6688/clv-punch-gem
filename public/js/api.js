@@ -154,3 +154,12 @@ export async function clearSwapOverride(date) {
 export async function registerTelegramWebhook(webhookUrl) {
     return apiPost('/api/actions', { action: 'registerTelegramWebhook', webhookUrl });
 }
+
+/** GET /api/events — get system events log (swap, off, settings changes) */
+export async function getEvents(types = null, limit = 100) {
+    let path = `/api/events?limit=${limit}`;
+    if (types && types.length > 0) {
+        path += `&types=${types.join(',')}`;
+    }
+    return apiGet(path);
+}
