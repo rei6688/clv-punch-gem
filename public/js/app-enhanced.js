@@ -759,22 +759,51 @@ async function renderDashboard(container) {
                     popup.className = 'calendar-popup';
                     popup.innerHTML = `
                         <div class="popup-header">
-                            <span>${dayLabel} ${dd[2]}/${dd[1]}/${dd[0]}</span>
-                            ${isOff ? '<span class="text-[9px] font-black px-2 py-0.5 rounded bg-orange-500/10 text-orange-500">OFF</span>' : ''}
+                            <div class="flex items-center gap-1.5">
+                                <span>${dayLabel} ${dd[2]}/${dd[1]}/${dd[0]}</span>
+                                ${isOff ? '<span class="text-[9px] font-black px-2 py-0.5 rounded bg-orange-500/10 text-orange-500">OFF</span>' : ''}
+                            </div>
+                            <button class="popup-close" aria-label="Close"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
                         </div>
                         ${modeHtml}
                         ${!isOff ? periodHtml('AM Punch', amP) : ''}
                         ${!isOff ? periodHtml('PM Punch', pmP) : ''}
                     `;
 
-                    // Position popup near the clicked cell
-                    const rect = cell.getBoundingClientRect();
-                    popup.style.top = `${rect.bottom + 6}px`;
-                    popup.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 250))}px`;
                     document.body.appendChild(popup);
+                    lucide.createIcons({ nodes: [popup] });
+
+                    // Position popup near cell on desktop, center on mobile
+                    if (window.innerWidth <= 640) {
+                        popup.classList.add('mobile-centered');
+                    } else {
+                        const rect = cell.getBoundingClientRect();
+                        popup.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 250))}px`;
+                        popup.style.top = `${rect.bottom + 6}px`;
+
+                        // Keep popup inside viewport vertically
+                        const popupRect = popup.getBoundingClientRect();
+                        if (popupRect.bottom > window.innerHeight - 8) {
+                            const top = Math.max(8, rect.top - popupRect.height - 6);
+                            popup.style.top = `${top}px`;
+                        }
+                    }
 
                     // Dismiss on click outside
-                    const dismiss = (ev) => { if (!popup.contains(ev.target) && ev.target !== cell) { popup.remove(); document.removeEventListener('click', dismiss); } };
+                    const dismiss = (ev) => {
+                        if (!popup.contains(ev.target) && ev.target !== cell) {
+                            popup.remove();
+                            document.removeEventListener('click', dismiss);
+                        }
+                    };
+                    const closeBtn = popup.querySelector('.popup-close');
+                    if (closeBtn) {
+                        closeBtn.onclick = (ev) => {
+                            ev.stopPropagation();
+                            popup.remove();
+                            document.removeEventListener('click', dismiss);
+                        };
+                    }
                     setTimeout(() => document.addEventListener('click', dismiss), 10);
                 };
             });
