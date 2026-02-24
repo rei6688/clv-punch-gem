@@ -690,6 +690,13 @@ nav {
   max-width: 240px;
   font-size: 0.7rem;
 }
+.calendar-popup.mobile-centered {
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 280px);
+  max-width: 92vw;
+}
 .calendar-popup .popup-header {
   font-weight: 800;
   font-size: 0.8rem;
@@ -697,6 +704,22 @@ nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+.calendar-popup .popup-close {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted)/0.5);
+  color: hsl(var(--muted-foreground));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.calendar-popup .popup-close:hover {
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--muted-foreground)/0.35);
 }
 .calendar-popup .popup-row {
   display: flex;

@@ -267,7 +267,7 @@ module.exports = async function handler(req, res) {
     const handler = handlers[action];
 
     if (!handler) {
-      return bad(400, `unknown action: ${action}. Valid actions: markDone, markOff, markWfhToday, clearOff, swapDay, testTelegram, registerTelegramWebhook`);
+      return bad(400, `unknown action: ${action}. Valid actions: markDone, markOff, markWfhToday, clearOff, swapDay, clearSwapOverride, testTelegram, registerTelegramWebhook`);
     }
 
     return await handler(req, res, rid);
