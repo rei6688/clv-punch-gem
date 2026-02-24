@@ -529,6 +529,43 @@ async function renderDashboard(container) {
 
         container.innerHTML = `
         <div class="max-w-6xl mx-auto space-y-8 animate-in">
+            <!-- Today/Tomorrow Overview Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Today Card -->
+                <div id="today-card" class="card p-6 border-2 border-primary/20 hover:border-primary/40 transition-all">
+                    <div class="flex items-start justify-between mb-4">
+                        <div>
+                            <p class="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Today</p>
+                            <p class="text-lg font-black tracking-tight">${new Date(date + 'T00:00:00+07:00').toLocaleDateString('vi-VN', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                        </div>
+                        ${day.modeOverride && day.modeOverride !== day.scheduleMode ? `<span class="badge !bg-amber-500/20 !text-amber-600 !border-amber-500/20"><i data-lucide="repeat-2" class="w-3 h-3 inline mr-1"></i>SWAPPED</span>` : ''}
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold text-muted-foreground/70">Default Schedule</span>
+                            <span class="text-sm font-black">${day.scheduleMode === 'wfh' ? '<i data-lucide="laptop" class="w-4 h-4 inline text-primary"></i> WFH' : day.scheduleMode === 'off' ? '<i data-lucide="moon" class="w-4 h-4 inline text-orange-500"></i> OFF' : '<i data-lucide="building-2" class="w-4 h-4 inline"></i> Office'}</span>
+                        </div>
+                        ${day.modeOverride && day.modeOverride !== day.scheduleMode ? `<div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold text-amber-600/70">Active Override</span>
+                            <span class="text-sm font-black text-amber-600">${day.modeOverride === 'wfh' ? '<i data-lucide="laptop" class="w-4 h-4 inline text-amber-500"></i> WFH' : day.modeOverride === 'off' ? '<i data-lucide="moon" class="w-4 h-4 inline text-orange-500"></i> OFF' : '<i data-lucide="building-2" class="w-4 h-4 inline"></i> Office'}</span>
+                        </div>` : ''}
+                    </div>
+                </div>
+
+                <!-- Tomorrow Card -->
+                <div id="tomorrow-card" class="card p-6 border-2 border-muted/20 hover:border-muted/40 transition-all">
+                    <div class="flex items-start justify-between mb-4">
+                        <div>
+                            <p class="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Tomorrow</p>
+                            <p class="text-lg font-black tracking-tight">${new Date(new Date(date + 'T00:00:00+07:00').getTime() + 86400000).toLocaleDateString('vi-VN', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                        </div>
+                    </div>
+                    <div id="tomorrow-content" class="space-y-2">
+                        <p class="text-xs text-muted-foreground">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Hero Section with Stats -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <!-- Main Hero Card -->
@@ -673,6 +710,50 @@ async function renderDashboard(container) {
 
         // Render recent activity
         renderRecentActivity(records.slice(0, 5));
+
+        // Load tomorrow's schedule info
+        const loadTomorrowInfo = async () => {
+            const tomorrow = new Date(date + 'T00:00:00+07:00');
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowDate = tomorrow.toISOString().split('T')[0];
+            
+            try {
+                const res = await API.getBulkState([tomorrowDate]);
+                const tomorrowState = res.byDate && res.byDate[tomorrowDate];
+                
+                if (tomorrowState) {
+                    const scheduleMode = tomorrowState.scheduleMode || 'unknown';
+                    const modeOverride = tomorrowState.modeOverride;
+                    const effectiveMode = tomorrowState.effectiveMode || scheduleMode;
+                    const isSwapped = modeOverride && modeOverride !== scheduleMode;
+                    
+                    const modeBadge = (m) => {
+                        if (m === 'wfh') return '<i data-lucide="laptop" class="w-4 h-4 inline text-primary mr-1"></i><span>WFH</span>';
+                        if (m === 'off') return '<i data-lucide="moon" class="w-4 h-4 inline text-orange-500 mr-1"></i><span>OFF</span>';
+                        return '<i data-lucide="building-2" class="w-4 h-4 inline mr-1"></i><span>Office</span>';
+                    };
+                    
+                    let html = `
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold text-muted-foreground/70">Default Schedule</span>
+                            <span class="text-sm font-black">${modeBadge(scheduleMode)}</span>
+                        </div>`;
+                    
+                    if (isSwapped) {
+                        html += `<div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold text-amber-600/70">Active Override</span>
+                            <span class="text-sm font-black text-amber-600">${modeBadge(modeOverride)}</span>
+                        </div>`;
+                    }
+                    
+                    $('#tomorrow-content').innerHTML = html;
+                    lucide.createIcons();
+                }
+            } catch (e) {
+                $('#tomorrow-content').innerHTML = `<p class="text-xs text-red-500">Error loading tomorrow's info</p>`;
+            }
+        };
+        loadTomorrowInfo();
 
         // Event listeners
         $('#system-toggle').onchange = async (e) => {
@@ -901,11 +982,11 @@ async function renderHistory(container) {
 
     container.innerHTML = `
         <div class="max-w-6xl mx-auto space-y-8 animate-in pb-20">
-            <!-- Header with Stats -->
+            <!-- Header with Tabs -->
             <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-10">
                 <div>
                     <h2 class="text-3xl font-black tracking-tight">Activity Log</h2>
-                    <p class="text-[10px] font-black text-muted-foreground uppercase tracking-widest mt-1">Timeline of work sessions</p>
+                    <p class="text-[10px] font-black text-muted-foreground uppercase tracking-widest mt-1">Timeline of work sessions and schedule changes</p>
                 </div>
                 <div class="flex gap-3">
                     <button id="export-csv" class="export-btn">
@@ -919,82 +1000,104 @@ async function renderHistory(container) {
                 </div>
             </div>
 
-            <!-- Filter Panel -->
-            <div class="filter-panel">
-                <div class="filter-group">
-                    <label class="filter-label">Date Range</label>
-                    <select id="hist-range" class="filter-input">
-                        <option value="7">Last 7 Days</option>
-                        <option value="30" selected>Last 30 Days</option>
-                        <option value="60">Last 60 Days</option>
-                        <option value="90">Last 90 Days</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label class="filter-label">Status Filter</label>
-                    <select id="status-filter" class="filter-input">
-                        <option value="all">All Status</option>
-                        <option value="success">Success Only</option>
-                        <option value="fail">Failed Only</option>
-                        <option value="pending">Pending Only</option>
-                    </select>
-                </div>
-                <div class="filter-group flex-1">
-                    <label class="filter-label">Search</label>
-                    <input type="text" id="search-input" class="filter-input" placeholder="Search by date...">
-                </div>
-            </div>
-
-            <!-- Stats Overview -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="stat-card">
-                    <div class="stat-icon success">
-                        <i data-lucide="check-circle-2" class="w-5 h-5"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-label">Total Success</div>
-                        <div class="stat-value" id="total-success">0</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon warning">
-                        <i data-lucide="alert-circle" class="w-5 h-5"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-label">Total Failed</div>
-                        <div class="stat-value" id="total-failed">0</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon info">
-                        <i data-lucide="clock" class="w-5 h-5"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-label">Avg Punch Time</div>
-                        <div class="stat-value text-lg" id="avg-time">--:--</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon primary">
-                        <i data-lucide="percent" class="w-5 h-5"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-label">Success Rate</div>
-                        <div class="stat-value" id="hist-success-rate">0</div>
-                        <div class="stat-subtitle">%</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Timeline List -->
-            <div id="hist-list" class="space-y-3"></div>
-            
-            <!-- Load More -->
-            <div class="text-center pt-6">
-                <button id="load-more" class="btn btn-outline">
-                    <i data-lucide="arrow-down" class="w-4 h-4"></i>
-                    Load More
+            <!-- Tab Navigation -->
+            <div class="flex gap-2 border-b border-border">
+                <button id="tab-punches" class="history-tab-btn py-3 px-4 font-black border-b-2 border-primary text-primary" data-tab="punches">
+                    <i data-lucide="clock" class="w-4 h-4 inline mr-2"></i>Punch Records
                 </button>
+                <button id="tab-changes" class="history-tab-btn py-3 px-4 font-black border-b-2 border-transparent text-muted-foreground hover:text-foreground transition-colors" data-tab="changes">
+                    <i data-lucide="repeat-2" class="w-4 h-4 inline mr-2"></i>Schedule Changes
+                </button>
+            </div>
+
+            <!-- Punches Tab -->
+            <div id="tab-content-punches" class="tab-content active">
+                <!-- Filter Panel -->
+                <div class="filter-panel">
+                    <div class="filter-group">
+                        <label class="filter-label">Date Range</label>
+                        <select id="hist-range" class="filter-input">
+                            <option value="7">Last 7 Days</option>
+                            <option value="30" selected>Last 30 Days</option>
+                            <option value="60">Last 60 Days</option>
+                            <option value="90">Last 90 Days</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Status Filter</label>
+                        <select id="status-filter" class="filter-input">
+                            <option value="all">All Status</option>
+                            <option value="success">Success Only</option>
+                            <option value="fail">Failed Only</option>
+                            <option value="pending">Pending Only</option>
+                        </select>
+                    </div>
+                    <div class="filter-group flex-1">
+                        <label class="filter-label">Search</label>
+                        <input type="text" id="search-input" class="filter-input" placeholder="Search by date...">
+                    </div>
+                </div>
+
+                <!-- Stats Overview -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="stat-card">
+                        <div class="stat-icon success">
+                            <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">Total Success</div>
+                            <div class="stat-value" id="total-success">0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon warning">
+                            <i data-lucide="alert-circle" class="w-5 h-5"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">Total Failed</div>
+                            <div class="stat-value" id="total-failed">0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon info">
+                            <i data-lucide="clock" class="w-5 h-5"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">Avg Punch Time</div>
+                            <div class="stat-value text-lg" id="avg-time">--:--</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon primary">
+                            <i data-lucide="percent" class="w-5 h-5"></i>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-label">Success Rate</div>
+                            <div class="stat-value" id="hist-success-rate">0</div>
+                            <div class="stat-subtitle">%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline List -->
+                <div id="hist-list" class="space-y-3"></div>
+                
+                <!-- Load More -->
+                <div class="text-center pt-6">
+                    <button id="load-more" class="btn btn-outline">
+                        <i data-lucide="arrow-down" class="w-4 h-4"></i>
+                        Load More
+                    </button>
+                </div>
+            </div>
+
+            <!-- Changes Tab -->
+            <div id="tab-content-changes" class="tab-content hidden">
+                <div class="space-y-4">
+                    <div id="changes-list" class="space-y-3">
+                        <p class="text-xs text-muted-foreground text-center py-8">Loading...</p>
+                    </div>
+                </div>
             </div>
         </div>`;
     
@@ -1108,6 +1211,85 @@ async function renderHistory(container) {
         updateHistoryStats(filteredRecords);
     };
 
+    // ── Load Changes History from system_events ──────────────────────
+    const loadChangesHistory = async () => {
+        const changesList = $('#changes-list');
+        try {
+            const events = await API.getEvents('swap_day', 100);
+            if (!events || !events.events || events.events.length === 0) {
+                changesList.innerHTML = '<div class="card !border-dashed text-center opacity-40 font-bold py-20">No schedule changes recorded</div>';
+                return;
+            }
+
+            const dayLabels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+            const modeBadge = (m) => m === 'wfh'
+                ? '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-primary/10 text-primary"><i data-lucide="laptop" class="w-3 h-3"></i>WFH</span>'
+                : m === 'off'
+                ? '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-orange-500/10 text-orange-500"><i data-lucide="moon" class="w-3 h-3"></i>OFF</span>'
+                : '<span class="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-muted text-muted-foreground"><i data-lucide="building-2" class="w-3 h-3"></i>OFFICE</span>';
+
+            changesList.innerHTML = events.events.map(ev => {
+                const data = ev.event_data ? (typeof ev.event_data === 'string' ? JSON.parse(ev.event_data) : ev.event_data) : {};
+                const date = data.date || ev.created_at;
+                const fromMode = data.from || 'unknown';
+                const toMode = data.to || 'unknown';
+                const timestamp = new Date(ev.created_at * 1000 || ev.created_at);
+                const timeStr = timestamp.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                const dateStr = timestamp.toLocaleDateString('vi-VN', { weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit' });
+                
+                return `<div class="timeline-item group hover:border-amber-500/20 transition-all">
+                    <div class="flex flex-col">
+                        <span class="text-[9px] font-black uppercase opacity-30">${dateStr.split(',')[0]}</span>
+                        <span class="text-lg font-black tracking-tighter">${dateStr.split('/')[0]}</span>
+                        <span class="text-[9px] font-mono opacity-20">${timeStr}</span>
+                    </div>
+                    <div class="flex items-center gap-6 flex-1">
+                        <div class="flex-1 space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-bold text-amber-600 dark:text-amber-400">Schedule change</span>
+                            </div>
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                ${modeBadge(fromMode)}
+                                <i data-lucide="arrow-right" class="w-3 h-3 text-muted-foreground"></i>
+                                ${modeBadge(toMode)}
+                                <span class="text-[9px] text-muted-foreground ml-1">on ${date}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+            lucide.createIcons();
+        } catch (e) {
+            changesList.innerHTML = `<div class="card !border-dashed text-center text-red-500 py-8">Error loading changes: ${e.message}</div>`;
+        }
+    };
+
+    // ── Tab Switching ───────────────────────────────────────────
+    const tabs = $$('.history-tab-btn');
+    tabs.forEach(tab => {
+        tab.onclick = () => {
+            const tabName = tab.dataset.tab;
+            
+            // Update tab active state
+            tabs.forEach(t => {
+                t.classList.remove('border-primary', 'text-primary');
+                t.classList.add('border-transparent', 'text-muted-foreground');
+            });
+            tab.classList.remove('border-transparent', 'text-muted-foreground');
+            tab.classList.add('border-primary', 'text-primary');
+
+            // Update tab content
+            $$('.tab-content').forEach(c => c.classList.add('hidden'));
+            const tabContent = $(`#tab-content-${tabName}`);
+            if (tabContent) tabContent.classList.remove('hidden');
+
+            // Load changes on first view
+            if (tabName === 'changes') {
+                loadChangesHistory();
+            }
+        };
+    });
+
     updateHistoryStats(records);
     renderHistoryList();
 
@@ -1135,7 +1317,7 @@ async function renderHistory(container) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// Settings Page - MAINTAINED
+// Settings Page - With Settings vs Overrides Distinction
 // ══════════════════════════════════════════════════════════════
 
 async function renderSettings(container) {
@@ -1239,9 +1421,16 @@ async function renderSettings(container) {
                 <div class="settings-header">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center"><i data-lucide="calendar" class="w-5 h-5"></i></div>
-                        <div><p class="font-black">Weekly Cycle</p><p class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Workflow Modes</p></div>
+                        <div>
+                            <p class="font-black">Default Weekly Schedule <span class="text-[10px] font-bold text-primary ml-1.5">PERMANENT RULES</span></p>
+                            <p class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Applied to all future weeks unless overridden</p>
+                        </div>
                     </div>
-                    <button id="save-schedule" class="btn btn-outline border-2 !py-2 !text-xs font-black">Commit Cycle</button>
+                    <button id="save-schedule" class="btn btn-primary !py-2 !text-xs font-black">Save Schedule</button>
+                </div>
+                <div class="p-3 mb-4 rounded-xl bg-primary/5 border border-primary/10 flex gap-2 text-[11px] text-primary/70 font-medium leading-snug">
+                    <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
+                    <span>Đây là quy tắc mặc định cho mỗi tuần. Thay đổi ở đây sẽ áp dụng cho tất cả các tuần tương lai (trừ các ngày được swap riêng biệt ở bên dưới).</span>
                 </div>
                 <div class="settings-content grid grid-cols-1 gap-1">
                     ${[1, 2, 3, 4, 5, 6, 0].map(day => {
@@ -1283,11 +1472,18 @@ async function renderSettings(container) {
                 <div class="settings-header">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center"><i data-lucide="repeat-2" class="w-5 h-5"></i></div>
-                        <div><p class="font-black">Active Swap Overrides</p><p class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Per-date overrides (not affecting default schedule)</p></div>
+                        <div>
+                            <p class="font-black">Today/Future Schedule Changes <span class="text-[10px] font-bold text-amber-500 ml-1.5">TEMPORARY SWAPS</span></p>
+                            <p class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Specific dates overriding the default schedule</p>
+                        </div>
                     </div>
                 </div>
+                <div class="p-3 mb-4 rounded-xl bg-amber-500/5 border border-amber-200/30 flex gap-2 text-[11px] text-amber-700/80 dark:text-amber-400/80 font-medium leading-snug">
+                    <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
+                    <span>Swap dành cho ngày cụ thể. Ví dụ: "Thứ 5 swap từ WFH → VP" hoặc "Thứ 2-3 tuần này OFF". Các swaps này chỉ áp dụng cho những ngày được chỉ định, không ảnh hưởng quy tắc mặc định.</span>
+                </div>
                 <div id="swap-overrides-list" class="settings-content">
-                    <p class="text-xs text-muted-foreground text-center py-4">Loading...</p>
+                    <p class="text-xs text-muted-foreground text-center py-4">Loading swaps...</p>
                 </div>
             </div>
 
@@ -1360,12 +1556,12 @@ async function renderSettings(container) {
         btn.textContent = 'Saving...';
         try {
             await API.updateSchedule(currentSchedule);
-            toast('Weekly Cycle Saved ✓', 'success');
+            toast('Default Schedule Updated ✓', 'success');
         } catch (e) {
             toast('Save failed: ' + e.message, 'error');
         } finally {
             btn.disabled = false;
-            btn.textContent = 'Commit Cycle';
+            btn.textContent = 'Save Schedule';
         }
     };
 
