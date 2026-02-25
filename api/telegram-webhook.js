@@ -1,74 +1,219 @@
-const { getTelegramConfig, setPeriodState, getFullDayState } = require('../lib/kv');
+// api/telegram-webhook.js — Telegram Bot webhook handler with auth + interactive commands
+
+const { getTelegramConfig, getFullDayState, setPeriodState, setIsEnabled, setIsOff } = require('../lib/kv');
 const { getVietnamDateKey, getCurrentPeriod } = require('../lib/time');
+const { answerCallback, editMessage, sendTelegram } = require('../lib/telegram');
 
-module.exports = async function handler(req, res) {
-    const config = await getTelegramConfig();
+// ─── Security: verify Telegram's built-in secret token (Option B) ────────────
+function verifyWebhookSecret(req) {
+    const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (!expectedSecret) return true; // Not set → allow (open dev mode)
 
-    // Basic security: Chỉ xử lý nếu token được cấu hình
-    if (!config.token) return res.status(200).send('OK');
+    const incoming = req.headers['x-telegram-bot-api-secret-token'] || '';
+    return incoming === expectedSecret;
+}
 
-    const { message, callback_query } = req.body;
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function statusEmoji(status) {
+    if (status === 'success' || status === 'manual_done') return '✅';
+    if (status === 'fail') return '❌';
+    return '⏳';
+}
 
-    // 1. Xử lý nút bấm (Callback Query)
-    if (callback_query) {
-        const { data, message: msg, id: callback_query_id } = callback_query;
+function modeLabel(state) {
+    if (state.day.isOff) return '🌴 Nghỉ (OFF)';
+    if (state.day.effectiveMode === 'wfh') return '🏠 WFH (Tự động)';
+    return '🏢 Văn phòng (Thủ công)';
+}
+
+// ─── Commands ─────────────────────────────────────────────────────────────────
+const commands = {
+    /**
+     * /status — Show today's full status
+     */
+    async status(message, config) {
+        const dateKey = getVietnamDateKey();
+        const state = await getFullDayState(dateKey);
+
+        const am = state.periods.am;
+        const pm = state.periods.pm;
+        const systemState = state.config.isEnabled ? '🟢 <b>ACTIVE</b>' : '🔴 <b>PAUSED</b>';
+
+        const text = `📊 <b>Trạng thái hệ thống hôm nay</b>
+━━━━━━━━━━━━━━━━
+📅 <b>Ngày:</b> ${dateKey}
+💡 <b>Hệ thống:</b> ${systemState}
+🗓 <b>Mode:</b> ${modeLabel(state)}
+━━━━━━━━━━━━━━━━
+${statusEmoji(am.status)} <b>Sáng (AM):</b> ${am.status} ${am.recordedPunchTime ? '— ' + am.recordedPunchTime : ''}
+${statusEmoji(pm.status)} <b>Chiều (PM):</b> ${pm.status} ${pm.recordedPunchTime ? '— ' + pm.recordedPunchTime : ''}`;
+
+        const buttons = state.config.isEnabled
+            ? [[{ text: '⏸ Tạm dừng hệ thống', callback_data: 'sys_disable' }]]
+            : [[{ text: '▶️ Bật lại hệ thống', callback_data: 'sys_enable' }]];
+
+        await sendTelegram({ text, buttons, token: config.token, chatId: message.chat.id });
+    },
+
+    /**
+     * /help — List all commands
+     */
+    async help(message, config) {
+        const text = `🤖 <b>Auto Punch Bot — Danh sách lệnh</b>
+
+/status — Xem trạng thái hôm nay
+/enable — Bật hệ thống
+/disable — Tắt hệ thống
+/off — Đánh dấu hôm nay nghỉ
+/punch — Punch thủ công ngay bây giờ
+/done — Đánh dấu phiên hiện tại hoàn thành
+/help — Xem danh sách lệnh này`;
+
+        await sendTelegram({ text, token: config.token, chatId: message.chat.id });
+    },
+
+    /**
+     * /enable — Enable the system
+     */
+    async enable(message, config) {
+        await setIsEnabled(true);
+        const text = `✅ <b>Hệ thống đã được BẬT lại.</b>
+Lần chạy cron tiếp theo sẽ tự động punch.`;
+        await sendTelegram({ text, token: config.token, chatId: message.chat.id });
+    },
+
+    /**
+     * /disable — Disable the system
+     */
+    async disable(message, config) {
+        await setIsEnabled(false);
+        const text = `⏸ <b>Hệ thống đã được TẮT.</b>
+Cron sẽ skip cho đến khi bạn /enable lại.`;
+        await sendTelegram({ text, token: config.token, chatId: message.chat.id });
+    },
+
+    /**
+     * /off — Mark today as vacation/off
+     */
+    async off(message, config) {
+        const dateKey = getVietnamDateKey();
+        await setIsOff(dateKey, true);
+        const text = `🌴 <b>Đã đánh dấu hôm nay (${dateKey}) là NGHỈ.</b>
+Hệ thống sẽ skip tất cả cron hôm nay.
+
+<i>Dùng /enable để bật lại hệ thống cho ngày khác.</i>`;
+        await sendTelegram({ text, token: config.token, chatId: message.chat.id });
+    },
+
+    /**
+     * /punch — Manual WFH punch now
+     */
+    async punch(message, config) {
         const dateKey = getVietnamDateKey();
         const period = getCurrentPeriod();
+        await setPeriodState(dateKey, period, 'manual_done', 'telegram');
+        const periodLabel = period === 'am' ? 'Sáng (AM)' : 'Chiều (PM)';
+        const text = `🚀 <b>Đã ghi nhận Punch thủ công — ${periodLabel}</b>
+Phiên ${period.toUpperCase()} hôm nay (${dateKey}) đã được đánh dấu <b>manual_done</b>.`;
+        await sendTelegram({ text, token: config.token, chatId: message.chat.id });
+    },
 
-        let responseText = '';
+    /**
+     * /done — Mark current period as done
+     */
+    async done(message, config) {
+        return commands.punch(message, config);
+    },
+};
 
-        if (data === 'punch_now') {
-            // Trigger GHA hoặc báo thành công giả lập
-            await setPeriodState(dateKey, period, 'manual_done', 'telegram');
-            responseText = '🚀 Đã ghi nhận Punch thành công!';
-        } else if (data === 'mark_done') {
-            await setPeriodState(dateKey, period, 'manual_done', 'telegram');
-            responseText = '✅ Đã đánh dấu phiên này hoàn thành.';
-        } else if (data === 'mark_done_am') {
-            await setPeriodState(dateKey, 'am', 'manual_done', 'telegram');
-            responseText = '🏢 Đã ghi nhận check-in văn phòng (Sáng).';
-        }
+// ─── Callback query handler (inline button presses) ──────────────────────────
+async function handleCallback(callback_query, config) {
+    const { data, message: msg, id: queryId } = callback_query;
+    const token = config.token;
+    let responseText = '';
+    let newMsgText = msg.text;
 
-        // Trả lời Telegram để ẩn loading
-        await fetch(`https://api.telegram.org/bot${config.token}/answerCallbackQuery`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ callback_query_id, text: responseText }),
-        });
-
-        // Cập nhật lại tin nhắn cũ (ẩn nút bấm)
-        await fetch(`https://api.telegram.org/bot${config.token}/editMessageText`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: msg.chat.id,
-                message_id: msg.message_id,
-                text: `${msg.text}\n\n<b>DONE:</b> ${responseText}`,
-                parse_mode: 'HTML'
-            }),
-        });
-
-        return res.status(200).json({ ok: true });
+    if (data === 'sys_enable') {
+        await setIsEnabled(true);
+        responseText = '✅ Hệ thống đã BẬT!';
+        newMsgText += '\n\n<b>✅ ACTION: Hệ thống đã được BẬT lại.</b>';
+    } else if (data === 'sys_disable') {
+        await setIsEnabled(false);
+        responseText = '⏸ Hệ thống đã TẮT!';
+        newMsgText += '\n\n<b>⏸ ACTION: Hệ thống đã được TẮT.</b>';
+    } else if (data === 'punch_now' || data === 'mark_done') {
+        const dateKey = getVietnamDateKey();
+        const period = getCurrentPeriod();
+        await setPeriodState(dateKey, period, 'manual_done', 'telegram');
+        responseText = '✅ Đã ghi nhận Punch!';
+        newMsgText += `\n\n<b>✅ ACTION: ${period.toUpperCase()} đã được mark DONE.</b>`;
+    } else if (data === 'mark_done_am') {
+        const dateKey = getVietnamDateKey();
+        await setPeriodState(dateKey, 'am', 'manual_done', 'telegram');
+        responseText = '🏢 Đã ghi nhận sáng DONE!';
+        newMsgText += '\n\n<b>✅ ACTION: AM đã được mark DONE.</b>';
+    } else if (data === 'mark_off_today') {
+        const dateKey = getVietnamDateKey();
+        await setIsOff(dateKey, true);
+        responseText = '🌴 Đã đánh dấu nghỉ hôm nay!';
+        newMsgText += '\n\n<b>🌴 ACTION: Hôm nay đã đánh dấu NGHỈ.</b>';
     }
 
-    // 2. Xử lý lệnh chat (Command)
-    if (message && message.text) {
-        const text = message.text;
-        if (text === '/status') {
-            const dateKey = getVietnamDateKey();
-            const state = await getFullDayState(dateKey);
-            const reply = `📢 <b>Trạng thái hệ thống:</b>\n- Mode: ${state.config.isEnabled ? 'ACTIVE' : 'PAUSED'}\n- Vacation: ${state.day.isOff ? 'YES 🌴' : 'NO'}\n- Sáng: ${state.periods.am.status}\n- Chiều: ${state.periods.pm.status}`;
+    await Promise.all([
+        answerCallback(token, queryId, responseText),
+        editMessage(token, msg.chat.id, msg.message_id, newMsgText),
+    ]);
+}
 
-            await fetch(`https://api.telegram.org/bot${config.token}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: message.chat.id,
-                    text: reply,
-                    parse_mode: 'HTML'
-                }),
-            });
+// ─── Main handler ────────────────────────────────────────────────────────────
+module.exports = async function handler(req, res) {
+    // 1. Verify Telegram webhook secret (Option B auth)
+    if (!verifyWebhookSecret(req)) {
+        console.warn('[telegram-webhook] 403 — invalid webhook secret');
+        return res.status(403).send('Forbidden');
+    }
+
+    // Must be POST
+    if (req.method !== 'POST') {
+        return res.status(200).send('OK'); // Telegram sends GET to test connectivity
+    }
+
+    // 2. Load config
+    const config = await getTelegramConfig();
+    if (!config || !config.token) {
+        return res.status(200).send('OK'); // graceful no-op
+    }
+
+    const { message, callback_query } = req.body || {};
+
+    try {
+        // 3. Handle inline button presses
+        if (callback_query) {
+            await handleCallback(callback_query, config);
+            return res.status(200).json({ ok: true });
         }
+
+        // 4. Handle text commands
+        if (message && message.text) {
+            const rawText = message.text.trim();
+            // Commands: /status, /help, /enable, etc. (strip @BotUsername if present)
+            const cmdMatch = rawText.match(/^\/([a-z_]+)(@\S+)?/i);
+            if (cmdMatch) {
+                const cmdName = cmdMatch[1].toLowerCase();
+                const handler = commands[cmdName];
+                if (handler) {
+                    await handler(message, config);
+                } else {
+                    await sendTelegram({
+                        text: `❓ Lệnh không hợp lệ: <code>${cmdName}</code>\nDùng /help để xem danh sách.`,
+                        token: config.token,
+                        chatId: message.chat.id,
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[telegram-webhook] Error:', e.message);
     }
 
     return res.status(200).send('OK');

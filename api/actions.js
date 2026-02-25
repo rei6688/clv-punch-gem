@@ -1,7 +1,7 @@
 // Consolidated API: mark-done, mark-off, mark-wfh-today, clear-off
 // Routes by 'action' query parameter or body field
 
-const { setPeriodState, setIsOff, setIsOffRange, setDayModeOverride, getTelegramConfig, kv } = require('../lib/kv');
+const { setPeriodState, setIsOff, setIsOffRange, setDayModeOverride, getFullDayState, getTelegramConfig, kv } = require('../lib/kv');
 const { saveSwapOverride, deleteSwapOverride, logSystemEvent } = require('../lib/db');
 const { sendChat } = require('../lib/chat');
 const { getVietnamDateKey, getCurrentPeriod } = require('../lib/time');
@@ -133,11 +133,15 @@ const handlers = {
     const dateKey = date;
     const todayKey = getVietnamDateKey();
 
+    // Calculate schedule mode for consistent history logging (relative to weekly cycle)
+    const fullState = await getFullDayState(dateKey);
+    const fromMode = fullState.day.scheduleMode;
+
     // Lưu override — persistent DB + KV cache
     await setDayModeOverride(dateKey, toMode);
     try {
       await saveSwapOverride(dateKey, toMode);
-      await logSystemEvent('swap_day', { date: dateKey, toMode }, 'api');
+      await logSystemEvent('swap_day', { date: dateKey, from: fromMode, to: toMode }, 'api');
     } catch (dbErr) {
       console.warn('[swapDay] DB persist skipped:', dbErr.message);
     }
@@ -252,16 +256,14 @@ const handlers = {
 
 module.exports = async function handler(req, res) {
   const rid = req.headers['x-vercel-id'] || Date.now().toString();
-  const ok = (data = {}) => res.status(200).json({ ok: true, requestId: rid, ...data });
-  const bad = (code, msg) => res.status(code).json({ ok: false, error: msg, requestId: rid });
 
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
-    return bad(405, 'method not allowed');
+    return res.status(405).json({ ok: false, error: 'method not allowed', requestId: rid });
   }
 
   if (!String(req.headers['content-type'] || '').includes('application/json')) {
-    return bad(415, 'unsupported content-type. Use application/json');
+    return res.status(415).json({ ok: false, error: 'unsupported content-type', requestId: rid });
   }
 
   try {
@@ -271,17 +273,15 @@ module.exports = async function handler(req, res) {
     const handler = handlers[action];
 
     if (!handler) {
-      return bad(400, `unknown action: ${action}. Valid actions: markDone, markOff, markWfhToday, clearOff, swapDay, clearSwapOverride, testTelegram, registerTelegramWebhook`);
+      return res.status(400).json({ ok: false, error: `unknown action: ${action}`, requestId: rid });
     }
 
     return await handler(req, res, rid);
 
   } catch (e) {
+    console.error('❌ API Action Error:', e);
     const msg = (e && e.message) || 'unknown error';
-    if (msg.includes('secret')) return bad(403, msg);
-    if (msg.includes('method not allowed')) return bad(405, msg);
-    if (msg.includes('unsupported')) return bad(415, msg);
-    if (msg.includes('invalid')) return bad(400, msg);
-    return bad(500, 'server error', { detail: msg });
+    if (msg.includes('secret')) return res.status(403).json({ ok: false, error: msg, requestId: rid });
+    return res.status(500).json({ ok: false, error: 'server error', detail: msg, requestId: rid });
   }
 };

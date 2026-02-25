@@ -99,14 +99,14 @@ function renderStatusGuide(data) {
 
     let modeIcon, modeLabel, modeBg;
     if (day.isOff) {
-        modeIcon = 'umbrella'; modeLabel = 'Vacation'; modeBg = 'bg-orange-500/10 text-orange-600';
+        modeIcon = 'umbrella'; modeLabel = 'Day Off'; modeBg = 'bg-orange-500/10 text-orange-600';
     } else if (dayType === 'wfh') {
         modeIcon = 'laptop';
-        modeLabel = isSwapped ? 'WFH — Auto Punch 🔄' : 'WFH — Auto Punch';
+        modeLabel = isSwapped ? 'WFH — Auto-Punch 🔄' : 'WFH — Auto-Punch';
         modeBg = 'bg-primary/10 text-primary';
     } else {
         modeIcon = 'building-2';
-        modeLabel = isSwapped ? 'Văn Phòng — Check-in thủ công 🔄' : 'Văn Phòng — Check-in thủ công';
+        modeLabel = isSwapped ? 'Văn Phòng — Manual 🔄' : 'Văn Phòng — Manual';
         modeBg = 'bg-muted text-muted-foreground';
     }
 
@@ -149,9 +149,6 @@ function renderStatusGuide(data) {
     lucide.createIcons({ nodes: [container] });
 }
 
-// ══════════════════════════════════════════════════════════════
-// Modals
-// ══════════════════════════════════════════════════════════════
 
 function showMarkOffModal(dateHint = Utils.todayVN()) {
     const root = $('#modal-root');
@@ -516,396 +513,379 @@ async function renderDashboard(container) {
 
         const { config, day, periods, date } = data;
         const { records } = historyData;
-        const schedule = config.schedule || {}, times = config.times || { am: '08:30', noon: '13:30', pm: '20:00' };
+        const schedule = config.schedule || {};
+        const times = config.times || { am: '08:30', noon: '13:30', pm: '20:00' };
 
-        // Fetch bulk state for calendar month (async, non-blocking)
+        // Fetch monthly state for calendar fallback
         let calendarBulkState = {};
         const fetchMonthBulkState = async (monthDate) => {
             const d = new Date(monthDate);
             const y = d.getFullYear(), m = d.getMonth();
-            const days = new Date(y, m + 1, 0).getDate();
-            const dates = [];
-            for (let i = 1; i <= days; i++) dates.push(`${y}-${String(m + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`);
+            const daysInMonth = new Date(y, m + 1, 0).getDate();
+            const dates = Array.from({ length: daysInMonth }, (_, i) => `${y}-${String(m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`);
             try {
-                const res = await API.getBulkState(dates);
-                return res;
+                return await API.getBulkState(dates);
             } catch { return {}; }
         };
         calendarBulkState = await fetchMonthBulkState(date);
 
-        // Calculate statistics
+        // Stats
         const successRate = Utils.calculateSuccessRate(records);
         const streak = Utils.calculateStreak(records);
         const monthlyStats = Utils.getMonthlyStats(records);
 
+        // Fetch recent changes
+        let recentEvents = [];
+        try {
+            const evRes = await fetch('/api/events?limit=4');
+            const evData = await evRes.json();
+            recentEvents = evData.events || [];
+        } catch (e) { console.warn('Fail to load recent events'); }
+
         container.innerHTML = `
-        <div class="max-w-6xl mx-auto space-y-8 animate-in">
-            <!-- Today/Tomorrow Overview Cards -->
+        <div class="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            
+            <!-- 1. Top Calendar Section -->
+            <div class="space-y-4">
+                <div class="flex items-center justify-between px-1">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]"></div>
+                        <h3 class="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Lịch tuần / Week View</h3>
+                    </div>
+                    <button id="toggle-calendar-view" class="text-[9px] font-black uppercase bg-primary/10 text-primary px-3 py-1 rounded-full hover:bg-primary hover:text-white transition-all flex items-center gap-1.5">
+                        <span id="calendar-toggle-text">Xem tháng</span>
+                        <i data-lucide="calendar" class="w-3 h-3"></i>
+                    </button>
+                </div>
+                
+                <div id="calendar-view-container" class="animate-in zoom-in-95 duration-500">
+                    ${Charts.renderWeekView(records, date, calendarBulkState, config)}
+                </div>
+                
+                <div id="full-calendar-wrapper" class="hidden animate-in slide-in-from-top-4 duration-500">
+                    <div class="card !p-2 bg-gradient-to-br from-card to-muted/30">
+                        <div id="mini-calendar-container">
+                            ${Charts.renderMiniCalendar(records, date, calendarBulkState, config)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Status Hub -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- Today Card -->
-                <div id="today-card" class="card p-6 border-2 border-primary/20 hover:border-primary/40 transition-all">
-                    <div class="flex items-start justify-between mb-4">
-                        <div>
-                            <p class="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Today</p>
-                            <p class="text-lg font-black tracking-tight">${new Date(date + 'T00:00:00+07:00').toLocaleDateString('vi-VN', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
-                        </div>
-                        ${day.modeOverride && day.modeOverride !== day.scheduleMode ? `<span class="badge !bg-amber-500/20 !text-amber-600 !border-amber-500/20"><i data-lucide="repeat-2" class="w-3 h-3 inline mr-1"></i>SWAPPED</span>` : ''}
+                <!-- Today Premium Card -->
+                <div class="card bg-gradient-to-br from-primary/10 via-card to-card border-none shadow-xl shadow-primary/5 group">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-[10px] font-black text-primary/60 uppercase tracking-widest">Hôm nay / Today</span>
+                        <div class="px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-[8px] font-black animate-pulse">LIVE</div>
                     </div>
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <span class="text-[10px] font-bold text-muted-foreground/70">Default Schedule</span>
-                            <span class="text-sm font-black">${day.scheduleMode === 'wfh' ? '<i data-lucide="laptop" class="w-4 h-4 inline text-primary"></i> WFH' : day.scheduleMode === 'off' ? '<i data-lucide="moon" class="w-4 h-4 inline text-orange-500"></i> OFF' : '<i data-lucide="building-2" class="w-4 h-4 inline"></i> Office'}</span>
+                    <div class="flex items-center gap-4">
+                        <div class="w-14 h-14 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/30 group-hover:scale-105 transition-transform duration-500">
+                            <i data-lucide="${day.isOff ? 'umbrella' : (day.effectiveMode === 'wfh' ? 'laptop' : 'building-2')}" class="w-8 h-8"></i>
                         </div>
-                        ${day.modeOverride && day.modeOverride !== day.scheduleMode ? `<div class="flex items-center justify-between">
-                            <span class="text-[10px] font-bold text-amber-600/70">Active Override</span>
-                            <span class="text-sm font-black text-amber-600">${day.modeOverride === 'wfh' ? '<i data-lucide="laptop" class="w-4 h-4 inline text-amber-500"></i> WFH' : day.modeOverride === 'off' ? '<i data-lucide="moon" class="w-4 h-4 inline text-orange-500"></i> OFF' : '<i data-lucide="building-2" class="w-4 h-4 inline"></i> Office'}</span>
-                        </div>` : ''}
-                    </div>
-                </div>
-
-                <!-- Tomorrow Card -->
-                <div id="tomorrow-card" class="card p-6 border-2 border-muted/20 hover:border-muted/40 transition-all">
-                    <div class="flex items-start justify-between mb-4">
-                        <div>
-                            <p class="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Tomorrow</p>
-                            <p class="text-lg font-black tracking-tight">${new Date(new Date(date + 'T00:00:00+07:00').getTime() + 86400000).toLocaleDateString('vi-VN', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                        <div class="space-y-0.5">
+                            <h4 class="text-xl font-black tracking-tight">${day.isOff ? 'Day Off 🌴' : (day.effectiveMode === 'wfh' ? 'WFH Home' : 'Office Work')}</h4>
+                            <p class="text-xs font-semibold text-muted-foreground">${day.isOff ? 'Relax & Enjoy!' : 'Tracking session active'}</p>
                         </div>
                     </div>
-                    <div id="tomorrow-content" class="space-y-2">
-                        <p class="text-xs text-muted-foreground">Loading...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Hero Section with Stats -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Main Hero Card -->
-                <div class="lg:col-span-2 card hero-card flex flex-col sm:flex-row items-center justify-between gap-8 !p-8">
-                    <div class="space-y-4 flex-1">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/30">
-                                <i data-lucide="${config.isEnabled ? 'shield-check' : 'shield-off'}" class="w-6 h-6"></i>
+                    <div class="grid grid-cols-2 gap-3 mt-6">
+                        <div class="p-3 rounded-xl bg-card border border-border/50 flex flex-col gap-1">
+                            <span class="text-[8px] font-black text-muted-foreground uppercase">Sáng (AM)</span>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-black italic tabular-nums">${periods.am.recordedPunchTime || times.am}</span>
+                                <i data-lucide="${periods.am.status === 'success' ? 'check-circle' : 'clock'}" class="w-3.5 h-3.5 ${periods.am.status === 'success' ? 'text-green-500' : 'text-muted-foreground/30'}"></i>
                             </div>
-                            <h1 class="text-2xl font-black tracking-tight">${config.isEnabled ? (day.isOff ? 'Vacation Mode' : 'System Active') : 'System Paused'}</h1>
                         </div>
-                        <p class="text-muted-foreground text-sm font-medium leading-relaxed max-w-md">
-                            ${day.isOff ? 'Hệ thống đang nghỉ ngơi. Mọi lệnh Punch tự động bị tạm dừng.' : 'Hệ thống đang trực tuyến. GHA sẽ thực thi Punch theo các mốc Rule bên dưới.'}
-                        </p>
-                        <div class="flex gap-2">
-                            <span class="badge badge-success !bg-emerald-500/10 !text-emerald-600">Rule AM: ≤ ${times.am}</span>
-                            <span class="badge badge-success !bg-indigo-500/10 !text-indigo-600">Rule PM: ≤ ${times.pm}</span>
+                        <div class="p-3 rounded-xl bg-card border border-border/50 flex flex-col gap-1">
+                            <span class="text-[8px] font-black text-muted-foreground uppercase">Chiều (PM)</span>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-black italic tabular-nums">${periods.pm.recordedPunchTime || times.pm}</span>
+                                <i data-lucide="${periods.pm.status === 'success' ? 'check-circle' : 'clock'}" class="w-3.5 h-3.5 ${periods.pm.status === 'success' ? 'text-green-500' : 'text-muted-foreground/30'}"></i>
+                            </div>
                         </div>
-                    </div>
-                    <div class="flex flex-col items-center gap-3">
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="system-toggle" class="sr-only peer" ${config.isEnabled ? 'checked' : ''}>
-                            <div class="w-14 h-8 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary shadow-inner"></div>
-                        </label>
-                        <span class="text-[10px] font-black uppercase tracking-widest opacity-40">${config.isEnabled ? 'Disable' : 'Enable'} System</span>
                     </div>
                 </div>
 
-                <!-- Countdown Timer -->
-                <div id="countdown-card" class="countdown-container">
-                    <div class="countdown-label">Next Punch In</div>
-                    <div class="countdown-timer">
-                        <div class="countdown-segment">
-                            <span class="countdown-value" id="cd-hours">00</span>
-                            <span class="countdown-unit">Hours</span>
-                        </div>
-                        <div class="countdown-segment">
-                            <span class="countdown-value" id="cd-minutes">00</span>
-                            <span class="countdown-unit">Mins</span>
-                        </div>
-                        <div class="countdown-segment">
-                            <span class="countdown-value" id="cd-seconds">00</span>
-                            <span class="countdown-unit">Secs</span>
+                <!-- Tomorrow Premium Card -->
+                <div id="tomorrow-card" class="card bg-card border-none shadow-lg">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-[10px] font-black text-muted-foreground/60 uppercase tracking-widest">Ngày mai / Tomorrow</span>
+                        <i data-lucide="calendar-days" class="w-3.5 h-3.5 text-muted-foreground/30"></i>
+                    </div>
+                    <div id="tomorrow-content">
+                        <div class="flex items-center gap-4 animate-pulse">
+                            <div class="w-14 h-14 rounded-2xl bg-muted"></div>
+                            <div class="space-y-2">
+                                <div class="w-32 h-4 bg-muted rounded-full"></div>
+                                <div class="w-20 h-3 bg-muted rounded-full"></div>
+                            </div>
                         </div>
                     </div>
-                    <div class="countdown-target">Target: ${times.am}</div>
                 </div>
             </div>
 
-            <!-- Stats Grid -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                ${Charts.renderStatCard('trending-up', 'Success Rate', successRate, 'Last 30 days', 'success')}
-                ${Charts.renderStatCard('flame', 'Current Streak', streak, streak > 1 ? 'days' : 'day', 'warning')}
-                ${Charts.renderStatCard('calendar-check', 'Work Days', monthlyStats.workDays, 'This month', 'primary')}
-                ${Charts.renderStatCard('clock', 'Late Punches', monthlyStats.latePunches, 'This month', 'info')}
+            <!-- 3. Bottom Grid: History & Actions -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Recent Changes Line Feed -->
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="space-y-4">
+                        <h3 class="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-1">Tiếp theo / Next Session</h3>
+                        <div class="card p-5 bg-primary shadow-xl shadow-primary/20 text-primary-foreground border-none overflow-hidden relative group">
+                            <div class="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+                            <div class="relative z-10 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="countdown-label text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Next Punch In</span>
+                                    <i data-lucide="timer" class="w-4 h-4 opacity-50"></i>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <span id="cd-hours" class="text-3xl font-black tabular-nums tracking-tighter">00</span>
+                                    <span class="text-xl font-black opacity-30">:</span>
+                                    <span id="cd-minutes" class="text-3xl font-black tabular-nums tracking-tighter">00</span>
+                                    <span class="text-xl font-black opacity-30">:</span>
+                                    <span id="cd-seconds" class="text-3xl font-black tabular-nums tracking-tighter">00</span>
+                                </div>
+                                <div class="countdown-target text-[9px] font-black uppercase opacity-60 tracking-wider">Target: --:--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <h3 class="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-1">Thay đổi gần đây / Recent</h3>
+                        <div class="card !p-4 border-dashed bg-transparent shadow-none hover:bg-muted/10">
+                            <div class="space-y-1">
+                                ${Charts.renderRecentHistoryChanges(recentEvents)}
+                            </div>
+                            <a href="#history" class="block text-center text-[9px] font-black uppercase text-primary mt-4 hover:underline py-2 border-t border-border/50">Details</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions & Stats Combined -->
+                <div class="lg:col-span-2 space-y-5">
+                    <div class="space-y-4">
+                         <h3 class="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-1">Công cụ / Quick Tools</h3>
+                         <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                            <button id="qa-wfh" class="btn btn-primary btn-action shadow-lg shadow-primary/20 hover:scale-105 transition-transform h-14">
+                                <i data-lucide="zap" class="w-4 h-4"></i>
+                                <span>Punch</span>
+                            </button>
+                            <button id="qa-swap-day" class="btn btn-outline btn-action hover:border-primary/50 group h-14">
+                                <i data-lucide="arrow-left-right" class="w-4 h-4 text-primary group-hover:rotate-180 transition-transform duration-500"></i>
+                                <span>Swap</span>
+                            </button>
+                            <button id="qa-range-off" class="btn btn-outline btn-action group h-14">
+                                <i data-lucide="umbrella" class="w-4 h-4 text-orange-400 group-hover:scale-110"></i>
+                                <span>Vacay</span>
+                            </button>
+                            <button id="qa-mark-am" class="btn btn-outline btn-action h-14">
+                                <i data-lucide="sun" class="w-4 h-4 text-amber-500"></i>
+                                <span>Skip A</span>
+                            </button>
+                            <button id="qa-mark-pm" class="btn btn-outline btn-action h-14">
+                                <i data-lucide="moon" class="w-4 h-4 text-indigo-500"></i>
+                                <span>Skip P</span>
+                            </button>
+                         </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="p-3 rounded-2xl bg-card border border-border shadow-sm text-center">
+                            <div class="text-[8px] font-black text-muted-foreground uppercase">Success</div>
+                            <div class="text-base font-black text-foreground">${successRate}%</div>
+                        </div>
+                        <div class="p-3 rounded-2xl bg-card border border-border shadow-sm text-center">
+                            <div class="text-[8px] font-black text-muted-foreground uppercase">Streak</div>
+                            <div class="text-base font-black text-foreground">${streak}d</div>
+                        </div>
+                        <div class="p-3 rounded-2xl bg-card border border-border shadow-sm text-center">
+                            <div class="text-[8px] font-black text-muted-foreground uppercase">Work Days</div>
+                            <div class="text-base font-black text-foreground">${monthlyStats.workDays}</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Quick Actions -->
-            <div class="space-y-3">
-                <h3 class="text-sm font-black uppercase tracking-widest text-muted-foreground/40 px-1">Actions</h3>
-                <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                    <button id="qa-wfh" class="btn btn-primary h-20 flex-col !gap-1.5 shadow-lg hover:-translate-y-1 transition-transform">
-                        <i data-lucide="rocket" class="w-6 h-6"></i>
-                        <span class="text-[9px] font-black uppercase tracking-wide">Punch Now</span>
-                    </button>
-                    <button id="qa-swap-day" class="btn btn-outline h-20 flex-col !gap-1.5 hover:-translate-y-1 transition-all hover:border-primary/50 group">
-                        <i data-lucide="arrow-left-right" class="w-6 h-6 text-primary opacity-60 group-hover:opacity-100"></i>
-                        <span class="text-[9px] font-black uppercase tracking-wide">Swap Day</span>
-                    </button>
-                    <button id="qa-range-off" class="btn btn-outline h-20 flex-col !gap-1.5 border-dashed hover:border-solid hover:-translate-y-1 transition-all group">
-                        <i data-lucide="umbrella" class="w-6 h-6 text-orange-400 opacity-60 group-hover:opacity-100"></i>
-                        <span class="text-[9px] font-black uppercase tracking-wide">Vacation</span>
-                    </button>
-                    <button id="qa-mark-am" class="btn btn-outline h-20 flex-col !gap-1.5 hover:-translate-y-1 transition-transform group">
-                        <i data-lucide="sun" class="w-6 h-6 text-orange-400 opacity-60 group-hover:opacity-100"></i>
-                        <span class="text-[9px] font-black uppercase tracking-wide">Skip AM</span>
-                    </button>
-                    <button id="qa-mark-pm" class="btn btn-outline h-20 flex-col !gap-1.5 hover:-translate-y-1 transition-transform group">
-                        <i data-lucide="moon" class="w-6 h-6 text-indigo-400 opacity-60 group-hover:opacity-100"></i>
-                        <span class="text-[9px] font-black uppercase tracking-wide">Skip PM</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Activity Grid -->
-            <div class="card !p-0 overflow-hidden">
-                <div class="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-border">
-                    <!-- AM Session -->
-                    <div class="p-5 flex items-center gap-4">
-                        <div class="p-3 rounded-xl bg-orange-400/10 text-orange-500 shrink-0"><i data-lucide="sun" class="w-5 h-5"></i></div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none">Morning</p>
-                            <p class="text-[10px] text-muted-foreground/60 font-bold mt-0.5">${times.am} – ${times.noon}</p>
-                        </div>
-                        <div class="flex flex-col items-end gap-1.5">
-                            ${statusBadge(periods.am.status, periods.am.source)}
-                            <span class="text-xs font-mono font-bold opacity-30">${periods.am.recordedPunchTime || '--:--'}</span>
-                            ${periods.am.imageUrl ? `<button class="text-[9px] font-black text-primary hover:underline" onclick="openLightbox('${periods.am.imageUrl}')">Review</button>` : ''}
-                        </div>
-                    </div>
-                    <!-- PM Session -->
-                    <div class="p-5 flex items-center gap-4">
-                        <div class="p-3 rounded-xl bg-indigo-400/10 text-indigo-500 shrink-0"><i data-lucide="moon" class="w-5 h-5"></i></div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none">Evening</p>
-                            <p class="text-[10px] text-muted-foreground/60 font-bold mt-0.5">${times.noon} – 17:30</p>
-                        </div>
-                        <div class="flex flex-col items-end gap-1.5">
-                            ${statusBadge(periods.pm.status, periods.pm.source)}
-                            <span class="text-xs font-mono font-bold opacity-30">${periods.pm.recordedPunchTime || '--:--'}</span>
-                            ${periods.pm.imageUrl ? `<button class="text-[9px] font-black text-primary hover:underline" onclick="openLightbox('${periods.pm.imageUrl}')">Review</button>` : ''}
-                        </div>
-                    </div>
-                    <!-- Calendar inline -->
-                    <div class="p-5">
-                        ${Charts.renderWeeklyActivity(records)}
-                    </div>
-                </div>
-                <!-- Mini calendar + recent activity below -->
-                <div class="border-t border-border grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border">
-                    <div id="mini-calendar-container" class="p-1">
-                        ${Charts.renderMiniCalendar(records, date, calendarBulkState)}
-                    </div>
-                    <div class="p-5">
-                        <p class="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Recent Activity</p>
-                        <div class="activity-feed" id="recent-activity"></div>
-                    </div>
-                </div>
-            </div>
         </div>`;
 
         lucide.createIcons();
 
-        // Animate stat values
-        $$('.stat-value').forEach(el => {
-            const value = parseInt(el.dataset.value || el.textContent);
-            Utils.animateValue(el, 0, value, 1000);
-        });
+        // Expand Calendar Logic
+        let calendarExpanded = false;
+        $('#toggle-calendar-view').onclick = () => {
+            calendarExpanded = !calendarExpanded;
+            const text = $('#calendar-toggle-text');
+            const wrapper = $('#full-calendar-wrapper');
+            const weekView = $('#calendar-view-container');
 
-        // Setup countdown timer
+            if (calendarExpanded) {
+                text.textContent = 'Thu gọn';
+                wrapper.classList.remove('hidden');
+                weekView.classList.add('opacity-30', 'pointer-events-none', 'scale-95');
+            } else {
+                text.textContent = 'Xem tháng';
+                wrapper.classList.add('hidden');
+                weekView.classList.remove('opacity-30', 'pointer-events-none', 'scale-95');
+            }
+        };
+
         startCountdownTimer(times.am, times.pm);
 
-        // Render recent activity
-        renderRecentActivity(records.slice(0, 5));
-
-        // Load tomorrow's schedule info
         const loadTomorrowInfo = async () => {
-            const tomorrow = new Date(date + 'T00:00:00+07:00');
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const tomorrowDate = tomorrow.toISOString().split('T')[0];
-
             try {
-                const res = await API.getBulkState([tomorrowDate]);
-                const tomorrowState = res.byDate && res.byDate[tomorrowDate];
+                const tom = new Date(date + 'T00:00:00+07:00');
+                tom.setDate(tom.getDate() + 1);
+                const tomISO = tom.toISOString().split('T')[0];
+                const res = await API.getBulkState([tomISO]);
+                const st = res.byDate && res.byDate[tomISO];
 
-                if (tomorrowState) {
-                    const scheduleMode = tomorrowState.scheduleMode || 'unknown';
-                    const modeOverride = tomorrowState.modeOverride;
-                    const effectiveMode = tomorrowState.effectiveMode || scheduleMode;
-                    const isSwapped = modeOverride && modeOverride !== scheduleMode;
+                if (st && $('#tomorrow-content')) {
+                    const mode = st.effectiveMode || st.scheduleMode || 'wio';
+                    const icon = mode === 'wfh' ? 'laptop' : mode === 'off' ? 'moon' : 'building-2';
+                    const color = mode === 'wfh' ? 'text-primary' : mode === 'off' ? 'text-orange-500' : 'text-muted-foreground';
+                    const label = mode === 'wfh' ? 'Home Office' : mode === 'off' ? 'Day Off' : 'At Office';
 
-                    const modeBadge = (m) => {
-                        if (m === 'wfh') return '<i data-lucide="laptop" class="w-4 h-4 inline text-primary mr-1"></i><span>WFH</span>';
-                        if (m === 'off') return '<i data-lucide="moon" class="w-4 h-4 inline text-orange-500 mr-1"></i><span>OFF</span>';
-                        return '<i data-lucide="building-2" class="w-4 h-4 inline mr-1"></i><span>Office</span>';
-                    };
-
-                    let html = `
-                        <div class="flex items-center justify-between">
-                            <span class="text-[10px] font-bold text-muted-foreground/70">Default Schedule</span>
-                            <span class="text-sm font-black">${modeBadge(scheduleMode)}</span>
-                        </div>`;
-
-                    if (isSwapped) {
-                        html += `<div class="flex items-center justify-between">
-                            <span class="text-[10px] font-bold text-amber-600/70">Active Override</span>
-                            <span class="text-sm font-black text-amber-600">${modeBadge(modeOverride)}</span>
-                        </div>`;
-                    }
-
-                    $('#tomorrow-content').innerHTML = html;
-                    lucide.createIcons();
+                    const container = $('#tomorrow-content');
+                    container.innerHTML = `
+                        <div class="flex items-center gap-4 animate-in slide-in-from-right-4 duration-500">
+                            <div class="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
+                                <i data-lucide="${icon}" class="w-7 h-7 ${color}"></i>
+                            </div>
+                            <div class="space-y-0.5">
+                                <h4 class="text-xl font-black">${label}</h4>
+                                <p class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">${tom.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
+                            </div>
+                        </div>
+                    `;
+                    lucide.createIcons({ nodes: [container] });
                 }
             } catch (e) {
-                $('#tomorrow-content').innerHTML = `<p class="text-xs text-red-500">Error loading tomorrow's info</p>`;
+                const container = $('#tomorrow-content');
+                if (container) container.innerHTML = `<p class="text-xs text-red-500 italic">Error loading schedule</p>`;
             }
         };
         loadTomorrowInfo();
 
-        // Event listeners
-        $('#system-toggle').onchange = async (e) => {
-            try { await API.updateConfig(e.target.checked); toast('Config Saved', 'success'); setTimeout(() => onHashChange(), 500); }
-            catch (err) { toast(err.message, 'error'); e.target.checked = !e.target.checked; }
-        };
-        $('#qa-range-off').onclick = () => showMarkOffModal(date);
-        $('#qa-swap-day').onclick = () => showSwapDayModal(schedule);
-        $('#qa-wfh').onclick = async () => { try { await API.markWfhToday(); toast('GHA Triggered', 'success'); } catch (e) { toast(e.message, 'error'); } };
-        $('#qa-mark-am').onclick = async () => { await API.markDone('am', date); toast('AM Marked Done', 'success'); onHashChange(); };
-        $('#qa-mark-pm').onclick = async () => { await API.markDone('pm', date); toast('PM Marked Done', 'success'); onHashChange(); };
-
-        // Calendar navigation
         const attachNavListeners = () => {
             $$('.calendar-nav').forEach(btn => {
                 btn.onclick = () => {
                     const nav = btn.dataset.nav;
-                    if (nav === 'prev') {
-                        globalState.calendarMonth.setMonth(globalState.calendarMonth.getMonth() - 1);
-                    } else {
-                        globalState.calendarMonth.setMonth(globalState.calendarMonth.getMonth() + 1);
-                    }
+                    if (nav === 'prev') globalState.calendarMonth.setMonth(globalState.calendarMonth.getMonth() - 1);
+                    else globalState.calendarMonth.setMonth(globalState.calendarMonth.getMonth() + 1);
                     rerenderCalendar();
                 };
             });
         };
         const rerenderCalendar = async () => {
-            const monthStr = globalState.calendarMonth.toISOString().split('T')[0];
-            const bs = await fetchMonthBulkState(monthStr);
-            calendarBulkState = bs;
-            $('#mini-calendar-container').innerHTML = Charts.renderMiniCalendar(records, monthStr, bs);
+            const mStr = globalState.calendarMonth.toISOString().split('T')[0];
+            const bs = await fetchMonthBulkState(mStr);
+            $('#mini-calendar-container').innerHTML = Charts.renderMiniCalendar(records, mStr, bs, config);
             lucide.createIcons();
             attachNavListeners();
-            attachCalendarCellListeners(records, calendarBulkState);
+            attachCalendarCellListeners(records, bs);
         };
         attachNavListeners();
 
-        // Calendar cell click: show detail popup
-        const dayLabelsPopup = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
         function attachCalendarCellListeners(recs, bulkSt) {
             const recMap = {};
             recs.forEach(r => { recMap[r.date] = r; });
             const byDate = (bulkSt && bulkSt.byDate) || {};
 
-            $$('.calendar-cell[data-date]').forEach(cell => {
+            const showPopup = (cell) => {
+                const existing = document.querySelector('.calendar-popup');
+                if (existing) existing.remove();
+                const dt = cell.dataset.date;
+                const rec = recMap[dt];
+                const st = byDate[dt];
+                const d = new Date(dt + 'T00:00:00+07:00');
+                const dayLabelsPopup = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+                const dayLabel = dayLabelsPopup[d.getDay()];
+                const dd = dt.split('-');
+
+                const mode = (st && (st.effectiveMode || st.scheduleMode)) || '—';
+                const isSwapped = st && st.modeOverride && st.modeOverride !== st.scheduleMode;
+                const modeText = mode === 'wfh' ? 'WFH' : mode === 'off' ? 'OFF' : 'Office';
+                const modeColor = mode === 'wfh' ? 'text-primary' : mode === 'off' ? 'text-orange-500' : 'text-muted-foreground';
+
+                const amP = rec?.periods?.am;
+                const pmP = rec?.periods?.pm;
+                const isOff = rec?.isOff || (rec?.day && rec.day.isOff) || (st && st.isOff);
+                const autoRun = config.isEnabled && !isOff && mode === 'wfh';
+                const systemLabel = autoRun ? 'Auto ⚡' : 'Manual ✋';
+
+                const popupHtml = `
+                    <div class="popup-header">
+                        <div class="flex items-center gap-2">
+                             <div class="w-2 h-2 rounded-full ${isOff ? 'bg-orange-500' : (mode === 'wfh' ? 'bg-primary' : 'bg-muted-foreground')}"></div>
+                             <span>${dayLabel} ${dd[2]}/${dd[1]}</span>
+                        </div>
+                        <button class="popup-close"><i data-lucide="x" class="w-3 h-3"></i></button>
+                    </div>
+                    <div class="space-y-1.5 pt-1">
+                        <div class="popup-row"><span>Chế độ / Mode</span><span class="${modeColor} font-black uppercase text-[10px]">${modeText}</span></div>
+                        <div class="popup-row"><span>Hệ thống / System</span><span class="font-black text-[10px] uppercase">${systemLabel}</span></div>
+                        <div class="popup-row"><span>Đã Swap / Swap</span><span class="font-black text-[10px] uppercase ${isSwapped ? 'text-amber-500' : 'text-muted-foreground/40'}">${isSwapped ? 'Đã đổi 🔄' : 'Gốc'}</span></div>
+                        
+                        ${!isOff ? `
+                            <div class="mt-3 pt-3 border-t border-border/50 space-y-1.5">
+                                <div class="popup-row">
+                                    <span class="flex items-center gap-1.5"><i data-lucide="sun" class="w-3 h-3 text-amber-500"></i> Sáng (AM)</span>
+                                    <span class="font-mono font-bold">${amP?.recordedPunchTime || '—'}</span>
+                                </div>
+                                <div class="popup-row">
+                                    <span class="flex items-center gap-1.5"><i data-lucide="moon" class="w-3 h-3 text-indigo-500"></i> Chiều (PM)</span>
+                                    <span class="font-mono font-bold">${pmP?.recordedPunchTime || '—'}</span>
+                                </div>
+                            </div>
+                        ` : `
+                            <div class="mt-3 py-2 text-center bg-orange-500/10 rounded-lg">
+                                <span class="text-[9px] font-black text-orange-600 uppercase">🌴 Day Off / Nghỉ</span>
+                            </div>
+                        `}
+                    </div>
+                `;
+                const popup = document.createElement('div');
+                popup.className = 'calendar-popup animate-in';
+                popup.innerHTML = popupHtml;
+                document.body.appendChild(popup);
+                lucide.createIcons({ nodes: [popup] });
+
+                const rect = cell.getBoundingClientRect();
+                popup.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 200))}px`;
+                popup.style.top = `${rect.bottom + 6}px`;
+
+                popup.querySelector('.popup-close').onclick = () => popup.remove();
+
+                const dismiss = (ev) => {
+                    if (!popup.contains(ev.target) && !cell.contains(ev.target)) {
+                        popup.remove();
+                        document.removeEventListener('click', dismiss);
+                    }
+                };
+                setTimeout(() => document.addEventListener('click', dismiss), 10);
+            };
+
+            $$('.calendar-cell[data-date], .week-cell[data-date]').forEach(cell => {
                 cell.onclick = (e) => {
                     e.stopPropagation();
-                    // Remove existing popup
-                    const existing = document.querySelector('.calendar-popup');
-                    if (existing) existing.remove();
-
-                    const dt = cell.dataset.date;
-                    const rec = recMap[dt];
-                    const st = byDate[dt];
-                    const d = new Date(dt + 'T00:00:00+07:00');
-                    const dayLabel = dayLabelsPopup[d.getDay()];
-                    const dd = dt.split('-');
-
-                    // Mode info
-                    let modeHtml = '';
-                    if (st) {
-                        const mode = st.effectiveMode || st.scheduleMode || '—';
-                        const isSwapped = st.modeOverride && st.modeOverride !== st.scheduleMode;
-                        const modeText = mode === 'wfh' ? 'WFH' : mode === 'off' ? 'OFF' : 'Office';
-                        const modeColor = mode === 'wfh' ? 'text-primary' : mode === 'off' ? 'text-orange-500' : 'text-muted-foreground';
-                        modeHtml = `<div class="popup-row"><span>Mode</span><span class="font-black ${modeColor}">${modeText}${isSwapped ? ' <span class="text-amber-500">(swapped)</span>' : ''}</span></div>`;
-                    }
-
-                    // Period info
-                    const periodHtml = (label, p) => {
-                        if (!p) return `<div class="popup-row"><span>${label}</span><span class="text-muted-foreground">—</span></div>`;
-                        const s = p.status;
-                        const time = p.recordedPunchTime || '';
-                        const icon = s === 'success' || s === 'manual_done' ? '<span class="text-green-500 font-black">OK</span>' : s === 'fail' ? '<span class="text-red-500 font-black">FAIL</span>' : '<span class="text-muted-foreground">Pending</span>';
-                        return `<div class="popup-row"><span>${label}</span><span>${icon}${time ? ' <span class="text-muted-foreground">' + time + '</span>' : ''}</span></div>`;
-                    };
-                    const amP = rec?.periods?.am;
-                    const pmP = rec?.periods?.pm;
-
-                    // OFF info
-                    const isOff = rec?.isOff || (rec?.day && rec.day.isOff) || (st && st.isOff);
-
-                    const popup = document.createElement('div');
-                    popup.className = 'calendar-popup';
-                    popup.innerHTML = `
-                        <div class="popup-header">
-                            <div class="flex items-center gap-1.5">
-                                <span>${dayLabel} ${dd[2]}/${dd[1]}/${dd[0]}</span>
-                                ${isOff ? '<span class="text-[9px] font-black px-2 py-0.5 rounded bg-orange-500/10 text-orange-500">OFF</span>' : ''}
-                            </div>
-                            <button class="popup-close" aria-label="Close"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
-                        </div>
-                        ${modeHtml}
-                        ${!isOff ? periodHtml('AM Punch', amP) : ''}
-                        ${!isOff ? periodHtml('PM Punch', pmP) : ''}
-                    `;
-
-                    document.body.appendChild(popup);
-                    lucide.createIcons({ nodes: [popup] });
-
-                    // Position popup near cell on desktop, center on mobile
-                    if (window.innerWidth <= 640) {
-                        popup.classList.add('mobile-centered');
-                    } else {
-                        const rect = cell.getBoundingClientRect();
-                        popup.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 250))}px`;
-                        popup.style.top = `${rect.bottom + 6}px`;
-
-                        // Keep popup inside viewport vertically
-                        const popupRect = popup.getBoundingClientRect();
-                        if (popupRect.bottom > window.innerHeight - 8) {
-                            const top = Math.max(8, rect.top - popupRect.height - 6);
-                            popup.style.top = `${top}px`;
-                        }
-                    }
-
-                    // Dismiss on click outside
-                    const dismiss = (ev) => {
-                        if (!popup.contains(ev.target) && ev.target !== cell) {
-                            popup.remove();
-                            document.removeEventListener('click', dismiss);
-                        }
-                    };
-                    const closeBtn = popup.querySelector('.popup-close');
-                    if (closeBtn) {
-                        closeBtn.onclick = (ev) => {
-                            ev.stopPropagation();
-                            popup.remove();
-                            document.removeEventListener('click', dismiss);
-                        };
-                    }
-                    setTimeout(() => document.addEventListener('click', dismiss), 10);
+                    showPopup(cell);
                 };
             });
         }
         attachCalendarCellListeners(records, calendarBulkState);
 
+        $('#qa-range-off').onclick = () => showMarkOffModal(date);
+        $('#qa-swap-day').onclick = () => showSwapDayModal(schedule);
+        $('#qa-wfh').onclick = async () => { try { await API.markWfhToday(); toast('Manual Punch Sent!', 'success'); } catch (e) { toast(e.message, 'error'); } };
+        $('#qa-mark-am').onclick = async () => { await API.markDone('am', date); onHashChange(); };
+        $('#qa-mark-pm').onclick = async () => { await API.markDone('pm', date); onHashChange(); };
+
     } catch (e) {
-        container.innerHTML = `<p class="p-20 text-center font-bold text-red-500">${e.message}</p>`;
+        console.error('Dash error:', e);
+        container.innerHTML = `<div class="p-20 text-center text-red-500">${e.message}</div>`;
     }
 }
+
+// Calculate statistics
 
 function startCountdownTimer(amTime, pmTime) {
     if (globalState.countdownInterval) {
@@ -928,10 +908,11 @@ function startCountdownTimer(amTime, pmTime) {
         }
 
         const countdown = Utils.getTimeUntil(targetTime);
+        const hEl = $('#cd-hours'), mEl = $('#cd-minutes'), sEl = $('#cd-seconds');
 
-        $('#cd-hours').textContent = String(countdown.hours).padStart(2, '0');
-        $('#cd-minutes').textContent = String(countdown.minutes).padStart(2, '0');
-        $('#cd-seconds').textContent = String(countdown.seconds).padStart(2, '0');
+        if (hEl) hEl.textContent = String(countdown.hours).padStart(2, '0');
+        if (mEl) mEl.textContent = String(countdown.minutes).padStart(2, '0');
+        if (sEl) sEl.textContent = String(countdown.seconds).padStart(2, '0');
 
         const labelEl = $('.countdown-label');
         if (labelEl) labelEl.textContent = label;
@@ -1243,7 +1224,7 @@ async function renderHistory(container) {
                 const data = ev.event_data ? (typeof ev.event_data === 'string' ? JSON.parse(ev.event_data) : ev.event_data) : {};
                 const date = data.date || ev.created_at;
                 const fromMode = data.from || 'unknown';
-                const toMode = data.to || 'unknown';
+                const toMode = data.to || data.toMode || 'unknown';
                 const timestamp = new Date(ev.created_at * 1000 || ev.created_at);
                 const timeStr = timestamp.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
                 const dateStr = timestamp.toLocaleDateString('vi-VN', { weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit' });

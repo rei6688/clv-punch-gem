@@ -4,6 +4,7 @@
 const { getIsEnabled, getIsOff, getPeriodState, setPeriodState, getPunchTimes, kv } = require('../lib/kv');
 const { getVietnamDateKey, getVietnamTime, isWFHDay, getCurrentPeriod, isWeekend } = require('../lib/time');
 const { sendChat } = require('../lib/chat');
+const { sendTelegram } = require('../lib/telegram');
 const { authenticateCron } = require('../lib/auth');
 const { Octokit } = require('@octokit/rest');
 
@@ -62,7 +63,20 @@ const handlers = {
 
     const isEnabled = await getIsEnabled();
     if (!isEnabled) {
-      return ok({ message: 'Skipped: System is disabled.' });
+      // Notify via Telegram with "re-enable" button
+      await sendTelegram({
+        text: `⚠️ <b>Cron WFH đã chạy nhưng hệ thống đang TẮT</b>
+━━━━━━━━━━━━━━━━
+📅 Ngày: ${dateKey}
+⏸ Hệ thống: <b>PAUSED</b>
+
+Bạn có muốn <b>BẬT lại</b> hệ thống để punch không?`,
+        buttons: [
+          [{ text: '▶️ Bật lại & Punch', callback_data: 'sys_enable' }],
+          [{ text: '🌴 Hôm nay nghỉ', callback_data: 'mark_off_today' }],
+        ],
+      });
+      return ok({ message: 'Skipped: System is disabled. Telegram notification sent.' });
     }
 
     const isOff = await getIsOff(dateKey);
@@ -100,7 +114,20 @@ const handlers = {
 
     const isEnabled = await getIsEnabled();
     if (!isEnabled) {
-      return ok({ message: 'Skipped reminder: System is disabled.' });
+      // Interactive reminder: system off, ask to re-enable
+      await sendTelegram({
+        text: `🔔 <b>Nhắc nhở — Hệ thống đang TẮT</b>
+━━━━━━━━━━━━━━━━
+📅 Ngày: ${dateKey}
+Hệ thống auto-punch hiện đang <b>PAUSED</b>.
+
+Muốn bật lại để punch hôm nay không?`,
+        buttons: [
+          [{ text: '▶️ Bật lại hệ thống', callback_data: 'sys_enable' }],
+          [{ text: '🌴 Hôm nay nghỉ', callback_data: 'mark_off_today' }],
+        ],
+      });
+      return ok({ message: 'Skipped reminder: System is disabled. Telegram notification sent.' });
     }
 
     const isOff = await getIsOff(dateKey);
