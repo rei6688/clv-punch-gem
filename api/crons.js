@@ -1,8 +1,8 @@
 // Consolidated API: cron-check-wfh, cron-reminder, cron-reset
 // Routes by 'cron' parameter
 
-const { getIsEnabled, getIsOff, getPeriodState, setPeriodState, getPunchTimes, kv } = require('../lib/kv');
-const { getVietnamDateKey, getVietnamTime, isWFHDay, getCurrentPeriod, isWeekend } = require('../lib/time');
+const { getIsEnabled, getIsOff, getPeriodState, setPeriodState, getPunchTimes, getFullDayState, kv } = require('../lib/kv');
+const { getVietnamDateKey, getVietnamTime, getCurrentPeriod, isWeekend } = require('../lib/time');
 const { sendChat } = require('../lib/chat');
 const { sendTelegram } = require('../lib/telegram');
 const { authenticateCron } = require('../lib/auth');
@@ -89,8 +89,11 @@ Bạn có muốn <b>BẬT lại</b> hệ thống để punch không?`,
       return ok({ message: 'WFH override already set.' });
     }
 
-    if (!isWFHDay(now)) {
-      return ok({ message: `Not a WFH day (${dateKey}).` });
+    const state = await getFullDayState(dateKey);
+    const mode = state.day.effectiveMode;
+
+    if (mode !== 'wfh') {
+      return ok({ message: `Today (${dateKey}) is not a WFH day (Mode: ${mode}).` });
     }
 
     await triggerGitHubWorkflow();
@@ -144,7 +147,10 @@ Muốn bật lại để punch hôm nay không?`,
       return ok({ message: `Skipped reminder: Day ${dateKey} is OFF.` });
     }
 
-    if (isWFHDay(now)) {
+    const state = await getFullDayState(dateKey);
+    const mode = state.day.effectiveMode;
+
+    if (mode === 'wfh') {
       const period = (currentHour < 13) ? 'am' : 'pm';
       const state = await getPeriodState(dateKey, period);
       const status = (state && state.status) || 'pending';
@@ -204,11 +210,18 @@ Muốn bật lại để punch hôm nay không?`,
       return ok({ message: `Skipped WFH reminder: Not in valid time window (Hour: ${currentHour}).` });
     }
 
+    const state = await getFullDayState(dateKey);
+    const mode = state.day.effectiveMode;
+
+    if (mode === 'off') {
+      return ok({ message: `Skipped: Day ${dateKey} is OFF.` });
+    }
+
     if (isWeekend(now)) {
       return ok({ message: `Skipped: It's the weekend (${dateKey}).` });
     }
 
-    if (currentHour < 10) {
+    if (mode === 'wio' && currentHour < 10) {
       const lockKey = `lock:office:${dateKey}`;
       return ok(await sendNotificationWithLock(lockKey, 3600 * 12, {
         title: '🏢 Nhắc nhở (Ngày Văn Phòng)',
@@ -238,8 +251,11 @@ Muốn bật lại để punch hôm nay không?`,
       return ok({ message: `Skipped reset: Day ${dateKey} is marked as OFF.` });
     }
 
-    if (!isWFHDay()) {
-      return ok({ message: `Skipped reset: Not a WFH day (${dateKey}).` });
+    const state = await getFullDayState(dateKey);
+    const mode = state.day.effectiveMode;
+
+    if (mode !== 'wfh') {
+      return ok({ message: `Skipped reset: Not a WFH day (Mode: ${mode}).` });
     }
 
     await Promise.all([

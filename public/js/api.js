@@ -6,10 +6,10 @@ const BASE = '';
 // ── Auth (PUNCH_SECRET) ──────────────────────────────────────
 let _secret = localStorage.getItem('punch_secret') || '';
 
-export function getSecret()  { return _secret; }
+export function getSecret() { return _secret; }
 export function setSecret(s) { _secret = s; localStorage.setItem('punch_secret', s); }
 export function clearSecret() { _secret = ''; localStorage.removeItem('punch_secret'); }
-export function hasSecret()  { return !!_secret; }
+export function hasSecret() { return !!_secret; }
 
 // ── Fetch helpers ─────────────────────────────────────────────
 async function apiFetch(path, options = {}) {
@@ -143,6 +143,11 @@ export async function authCheck() {
 /** POST /api/actions — send a Telegram test message */
 export async function testTelegram() {
     return apiPost('/api/actions', { action: 'testTelegram' });
+}
+
+/** POST /api/actions — send a Telegram real simulation message */
+export async function testTelegramReal() {
+    return apiPost('/api/actions', { action: 'testTelegramReal' });
 }
 
 /** POST /api/actions — clear a swap override for a specific date */

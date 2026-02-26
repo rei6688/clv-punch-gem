@@ -226,8 +226,10 @@ const handlers = {
     const { sendTelegram } = require('../lib/telegram');
     const now = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
     const result = await sendTelegram({
-      title: '🧪 Test kết nối từ CLV Punch',
-      message: `Telegram bot đã kết nối thành công! ✅\nThời gian: ${now}`,
+      text: `🧪 <b>Test kết nối từ CLV Punch</b>
+━━━━━━━━━━━━━━━━
+Telegram bot đã kết nối thành công! ✅
+Thời gian: ${now}`,
     });
     if (!result) return bad(400, 'Telegram chưa được cấu hình (token/chatId còn trống)');
     if (result.ok === false) return bad(400, result.description || 'Telegram API error');
@@ -243,7 +245,7 @@ const handlers = {
     const { webhookUrl } = req.body;
     if (!webhookUrl) return bad(400, 'webhookUrl required');
 
-    const r = await fetch(`https://api.telegram.org/bot${config.token}/setWebhook`, {
+    const result = await fetch(`https://api.telegram.org/bot${config.token}/setWebhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: webhookUrl }),
@@ -251,6 +253,37 @@ const handlers = {
     const data = await r.json();
     if (!data.ok) return bad(400, data.description || 'Telegram setWebhook failed');
     return ok({ webhook: webhookUrl });
+  },
+
+  async testTelegramReal(req, res, rid) {
+    const ok = (data = {}) => res.status(200).json({ ok: true, requestId: rid, ...data });
+    const bad = (code, msg) => res.status(code).json({ ok: false, error: msg, requestId: rid });
+
+    const { sendTelegram } = require('../lib/telegram');
+    const { getFullDayState } = require('../lib/kv');
+    const { getVietnamDateKey } = require('../lib/time');
+
+    const dateKey = getVietnamDateKey();
+    const state = await getFullDayState(dateKey);
+    const mode = state.day.effectiveMode;
+
+    let text = '';
+    let buttons = null;
+
+    if (mode === 'off') {
+      text = `🌴 <b>Nhắc nhở (Ngày OFF)</b>\n━━━━━━━━━━━━━━━━\n📅 Ngày: ${dateKey}\n\nHôm nay đã được đánh dấu <b>OFF</b>. Hệ thống sẽ KHÔNG chạy.\n\n<i>Nhớ /enable để bật lại cho ngày mai!</i>`;
+    } else if (mode === 'wfh') {
+      const status = state.periods.am.status;
+      text = `🏠 <b>Nhắc nhở WFH Home (Live)</b>\n━━━━━━━━━━━━━━━━\n📅 Ngày: ${dateKey}\n⏸ Hệ thống: <b>${state.config.isEnabled ? 'ON' : 'OFF'}</b>\n💡 Trạng thái: <b>${status.toUpperCase()}</b>\n\nBạn đang trong chế độ <b>Auto-Punch</b>.`;
+      buttons = [[{ text: '✅ Đã xong (Mark DONE)', callback_data: 'mark_done' }]];
+    } else {
+      text = `🏢 <b>Nhắc nhở (Ngày Văn Phòng)</b>\n━━━━━━━━━━━━━━━━\n📅 Ngày: ${dateKey}\n\nHôm nay là ngày lên văn phòng. Đừng quên tự check-in thủ công nhé!`;
+    }
+
+    const result = await sendTelegram({ text, buttons });
+    if (!result) return bad(400, 'Telegram chưa được cấu hình (token/chatId)');
+    if (result.ok === false) return bad(400, result.description || 'Telegram API Error');
+    return ok({ sent: true, mode });
   },
 };
 
