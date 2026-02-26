@@ -63,8 +63,8 @@ const handlers = {
     }
 
     const metadata = { message: 'Marked done manually via API' };
-    await setPeriodState(dateKey, period, 'manual_done', 'api', metadata);
-    await logSystemEvent('mark_done', { date: dateKey, period }, 'api').catch(e => console.warn(e.message));
+    await setPeriodState(dateKey, period, 'manual_done', 'manual', metadata);
+    await logSystemEvent('mark_done', { date: dateKey, period }, 'manual').catch(e => console.warn(e.message));
 
     const periodText = period === 'am' ? 'Punch In (Sáng)' : 'Punch Out (Chiều)';
     await sendChat({
@@ -113,28 +113,35 @@ const handlers = {
     const bad = (code, msg) => res.status(code).json({ ok: false, error: msg, requestId: rid });
 
     const dateKey = getVietnamDateKey();
+    const period = getCurrentPeriod(); // Detect if it's AM or PM now
+
     await setWfhOverride(dateKey);
     await triggerGitHubWorkflow();
 
     // Local dev: if PAT is missing, simulate a successful punch indicator on dashboard
     if (!githubPat) {
-      await setPeriodState(dateKey, 'am', 'manual_done', 'api', { message: 'Simulated on local (No GHA)' });
+      console.log(`[markWfhToday] Local simulation: setting ${period.toUpperCase()} to manual_done`);
+      await setPeriodState(dateKey, period, 'manual_done', 'manual', { message: 'Simulated on local (No GHA)' });
     }
 
-    await logSystemEvent('trigger_gha', { date: dateKey }, 'api').catch(e => console.warn(e.message));
+    await logSystemEvent('trigger_gha', { date: dateKey, period }, 'manual').catch(e => console.warn(e.message));
 
-    const msg = `🚀 <b>GHA Triggered: WFH Hôm Nay</b>\n━━━━━━━━━━━━━━━━\n📅 Ngày: ${dateKey}\nHệ thống đã gửi lệnh kích hoạt Punch In (AM) ngay lập tức.\n\nPM (Chiều) sẽ tự động chạy vào ~18:00.`;
+    const periodLabel = period === 'am' ? 'Sáng (AM)' : 'Chiều (PM)';
+    const nextStep = period === 'am' ? '\n\nPM (Chiều) sẽ tự động chạy vào ~18:00.' : '';
+    const msg = `🚀 <b>GHA Triggered: WFH ${periodLabel}</b>\n━━━━━━━━━━━━━━━━\n📅 Ngày: ${dateKey}\nHệ thống đã gửi lệnh kích hoạt Punch ${period === 'am' ? 'In' : 'Out'} ngay lập tức.${nextStep}`;
 
-    await Promise.all([
+    console.log('[markWfhToday] Sending notifications...');
+    const results = await Promise.all([
       sendChat({
-        title: 'ℹ️ Đã kích hoạt WFH (Sáng)',
-        message: `Đã gửi lệnh kích hoạt Punch In (AM) ngay lập tức. Hệ thống cũng sẽ tự động chạy Punch Out (PM) vào khoảng 18:00.`,
+        title: `ℹ️ Đã kích hoạt WFH (${periodLabel})`,
+        message: `Đã gửi lệnh kích hoạt Punch ${period === 'am' ? 'In' : 'Out'} ngay lập tức.${nextStep}`,
         icon: 'info',
       }),
       sendTelegram({ text: msg }).catch(e => console.warn('[markWfhToday] telegram skip:', e.message))
     ]);
+    console.log('[markWfhToday] Notifications sent.', results);
 
-    return ok({ triggered: true, override_set: true });
+    return ok({ triggered: true, override_set: true, period });
   },
 
   async swapDay(req, res, rid) {
