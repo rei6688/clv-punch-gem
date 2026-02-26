@@ -120,8 +120,12 @@ const handlers = {
 
     // Local dev: if PAT is missing, simulate a successful punch indicator on dashboard
     if (!githubPat) {
-      console.log(`[markWfhToday] Local simulation: setting ${period.toUpperCase()} to manual_done`);
-      await setPeriodState(dateKey, period, 'manual_done', 'manual', { message: 'Simulated on local (No GHA)' });
+      const now = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      console.log(`[markWfhToday] Local simulation: setting ${period.toUpperCase()} to manual_done at ${now}`);
+      await setPeriodState(dateKey, period, 'manual_done', 'manual', {
+        message: 'Simulated on local (No GHA)',
+        recordedPunchTime: now
+      });
     }
 
     await logSystemEvent('trigger_gha', { date: dateKey, period }, 'manual').catch(e => console.warn(e.message));
