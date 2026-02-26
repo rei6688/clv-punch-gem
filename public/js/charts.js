@@ -298,6 +298,7 @@ export function renderRecentHistoryChanges(events) {
         'swap_day': 'repeat-2',
         'mark_off_range': 'umbrella',
         'mark_done': 'check-circle',
+        'undo_done': 'refresh-cw',
         'update_config': 'settings',
         'default': 'edit-3'
     };
@@ -306,6 +307,7 @@ export function renderRecentHistoryChanges(events) {
         'swap_day': 'text-amber-500',
         'mark_off_range': 'text-orange-500',
         'mark_done': 'text-green-500',
+        'undo_done': 'text-sky-500',
         'update_config': 'text-primary',
         'default': 'text-muted-foreground'
     };
@@ -322,6 +324,7 @@ export function renderRecentHistoryChanges(events) {
             if (ev.event_type === 'swap_day') detail = `Swapped ${data.date} to ${data.mode.toUpperCase()}`;
             else if (ev.event_type === 'mark_off_range') detail = `Set OFF from ${data.start} to ${data.end}`;
             else if (ev.event_type === 'mark_done') detail = `Marked ${data.period.toUpperCase()} done`;
+            else if (ev.event_type === 'undo_done') detail = `Reset ${data.period.toUpperCase()} to pending`;
             else if (ev.event_type === 'update_config') detail = `System ${data.isEnabled ? 'Enabled' : 'Disabled'}`;
         } catch (e) { }
 

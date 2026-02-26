@@ -250,7 +250,7 @@ Thời gian: ${now}`,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: webhookUrl }),
     });
-    const data = await r.json();
+    const data = await result.json();
     if (!data.ok) return bad(400, data.description || 'Telegram setWebhook failed');
     return ok({ webhook: webhookUrl });
   },

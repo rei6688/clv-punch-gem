@@ -1,7 +1,7 @@
 // Service Worker for Auto Punch Pro
 // Provides offline functionality and caching
 
-const CACHE_NAME = 'auto-punch-v1';
+const CACHE_NAME = 'auto-punch-v3';
 const urlsToCache = [
   '/',
   '/index.html',
