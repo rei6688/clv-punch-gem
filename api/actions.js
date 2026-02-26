@@ -16,7 +16,8 @@ const GHA_WORKFLOW_ID = 'wfh-punch.yml';
 
 async function triggerGitHubWorkflow() {
   if (!githubPat) {
-    throw new Error('GITHUB_PAT is not configured on Vercel.');
+    console.warn('GITHUB_PAT is not configured. Skipping GitHub Actions trigger.');
+    return false;
   }
   const octokit = new Octokit({ auth: githubPat });
   try {
@@ -272,16 +273,15 @@ Thời gian: ${now}`,
     let buttons = null;
 
     if (mode === 'off') {
-      text = `🌴 <b>Nhắc nhở (Ngày OFF)</b>\n━━━━━━━━━━━━━━━━\n📅 Ngày: ${dateKey}\n\nHôm nay đã được đánh dấu <b>OFF</b>. Hệ thống sẽ KHÔNG chạy.\n\n<i>Nhớ /enable để bật lại cho ngày mai!</i>`;
+      text = `🌴 <b>Nhắc nhở (Ngày OFF)</b>\n━━━━━━━━━━━━━━━━\n📅 Ngày: ${dateKey}\n\nHôm nay đã được đánh dấu <b>OFF</b>. Hệ thống sẽ KHÔNG chạy.\n\n<i>Vào Dashboard để cài đặt lại nếu cần!</i>`;
     } else if (mode === 'wfh') {
       const status = state.periods.am.status;
       text = `🏠 <b>Nhắc nhở WFH Home (Live)</b>\n━━━━━━━━━━━━━━━━\n📅 Ngày: ${dateKey}\n⏸ Hệ thống: <b>${state.config.isEnabled ? 'ON' : 'OFF'}</b>\n💡 Trạng thái: <b>${status.toUpperCase()}</b>\n\nBạn đang trong chế độ <b>Auto-Punch</b>.`;
-      buttons = [[{ text: '✅ Đã xong (Mark DONE)', callback_data: 'mark_done' }]];
     } else {
       text = `🏢 <b>Nhắc nhở (Ngày Văn Phòng)</b>\n━━━━━━━━━━━━━━━━\n📅 Ngày: ${dateKey}\n\nHôm nay là ngày lên văn phòng. Đừng quên tự check-in thủ công nhé!`;
     }
 
-    const result = await sendTelegram({ text, buttons });
+    const result = await sendTelegram({ text });
     if (!result) return bad(400, 'Telegram chưa được cấu hình (token/chatId)');
     if (result.ok === false) return bad(400, result.description || 'Telegram API Error');
     return ok({ sent: true, mode });

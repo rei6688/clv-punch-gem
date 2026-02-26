@@ -541,6 +541,21 @@ async function renderDashboard(container) {
             recentEvents = evData.events || [];
         } catch (e) { console.warn('Fail to load recent events', e); }
 
+        const todayRec = records.find(r => r.date === date) || {};
+        const stAM = todayRec.periods?.am?.status || 'pending';
+        const stPM = todayRec.periods?.pm?.status || 'pending';
+        const amDone = stAM === 'manual_done' || stAM === 'success';
+        const pmDone = stPM === 'manual_done' || stPM === 'success';
+
+        const currentHour = new Date().getHours();
+        let smartAdvice = "";
+        if (day.isOff) smartAdvice = "Enjoy your day off! 🌴";
+        else if (currentHour < 12) {
+            smartAdvice = amDone ? "AM done! Chill till evening. ☕" : "Auto-AM is active. ⚡";
+        } else {
+            smartAdvice = pmDone ? "All done! Relax now. 🌙" : "PM Punch is active. ⏳";
+        }
+
         container.innerHTML = `
         <div class="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             
@@ -584,7 +599,7 @@ async function renderDashboard(container) {
                         </div>
                         <div class="space-y-0.5">
                             <h4 class="text-xl font-black tracking-tight">${day.isOff ? 'Day Off 🌴' : (day.effectiveMode === 'wfh' ? 'WFH Home' : 'Office Work')}</h4>
-                            <p class="text-xs font-semibold text-muted-foreground">${day.isOff ? 'Relax & Enjoy!' : 'Tracking session active'}</p>
+                            <p class="text-xs font-semibold text-primary/80">${smartAdvice}</p>
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-3 mt-6">
@@ -649,7 +664,7 @@ async function renderDashboard(container) {
                     </div>
 
                     <div class="space-y-4">
-                        <h3 class="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-1">Thay đổi gần đây / Recent</h3>
+                        <h3 class="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-1">Nhật ký hệ thống / Activity Log</h3>
                         <div class="card !p-4 border-dashed bg-transparent shadow-none hover:bg-muted/10">
                             <div class="space-y-1">
                                 ${Charts.renderRecentHistoryChanges(recentEvents)}
@@ -666,7 +681,7 @@ async function renderDashboard(container) {
                          <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
                             <button id="qa-wfh" class="btn btn-primary btn-action shadow-lg shadow-primary/20 hover:scale-105 transition-transform h-14">
                                 <i data-lucide="zap" class="w-4 h-4"></i>
-                                <span>Punch</span>
+                                <span>GHA Run</span>
                             </button>
                             <button id="qa-swap-day" class="btn btn-outline btn-action hover:border-primary/50 group h-14">
                                 <i data-lucide="arrow-left-right" class="w-4 h-4 text-primary group-hover:rotate-180 transition-transform duration-500"></i>
@@ -676,13 +691,13 @@ async function renderDashboard(container) {
                                 <i data-lucide="umbrella" class="w-4 h-4 text-orange-400 group-hover:scale-110"></i>
                                 <span>Vacay</span>
                             </button>
-                            <button id="qa-mark-am" class="btn btn-outline btn-action h-14">
-                                <i data-lucide="sun" class="w-4 h-4 text-amber-500"></i>
-                                <span>Skip A</span>
+                            <button id="qa-mark-am" class="btn btn-outline btn-action h-14 ${amDone ? 'border-sky-500/30 bg-sky-500/5' : ''}" data-state="${amDone ? 'done' : 'pending'}">
+                                <i data-lucide="${amDone ? 'refresh-cw' : 'sun'}" class="w-4 h-4 ${amDone ? 'text-sky-500' : 'text-amber-500'}"></i>
+                                <span>${amDone ? 'Undo A' : 'Skip A'}</span>
                             </button>
-                            <button id="qa-mark-pm" class="btn btn-outline btn-action h-14">
-                                <i data-lucide="moon" class="w-4 h-4 text-indigo-500"></i>
-                                <span>Skip P</span>
+                            <button id="qa-mark-pm" class="btn btn-outline btn-action h-14 ${pmDone ? 'border-sky-500/30 bg-sky-500/5' : ''}" data-state="${pmDone ? 'done' : 'pending'}">
+                                <i data-lucide="${pmDone ? 'refresh-cw' : 'moon'}" class="w-4 h-4 ${pmDone ? 'text-sky-500' : 'text-indigo-500'}"></i>
+                                <span>${pmDone ? 'Undo P' : 'Skip P'}</span>
                             </button>
                          </div>
                     </div>
@@ -875,8 +890,18 @@ async function renderDashboard(container) {
         $('#qa-range-off').onclick = () => showMarkOffModal(date);
         $('#qa-swap-day').onclick = () => showSwapDayModal(schedule);
         $('#qa-wfh').onclick = async () => { try { await API.markWfhToday(); toast('Manual Punch Sent!', 'success'); } catch (e) { toast(e.message, 'error'); } };
-        $('#qa-mark-am').onclick = async () => { await API.markDone('am', date); onHashChange(); };
-        $('#qa-mark-pm').onclick = async () => { await API.markDone('pm', date); onHashChange(); };
+        $('#qa-mark-am').onclick = async () => { 
+            const isDone = $('#qa-mark-am').dataset.state === 'done';
+            await API.markDone('am', date, isDone); 
+            toast(isDone ? 'Undo AM Done' : 'AM Marked Done', 'success');
+            onHashChange(); 
+        };
+        $('#qa-mark-pm').onclick = async () => { 
+            const isDone = $('#qa-mark-pm').dataset.state === 'done';
+            await API.markDone('pm', date, isDone); 
+            toast(isDone ? 'Undo PM Done' : 'PM Marked Done', 'success');
+            onHashChange(); 
+        };
 
     } catch (e) {
         console.error('Dash error:', e);
