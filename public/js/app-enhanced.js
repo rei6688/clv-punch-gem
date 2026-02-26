@@ -537,10 +537,9 @@ async function renderDashboard(container) {
         // Fetch recent changes
         let recentEvents = [];
         try {
-            const evRes = await fetch('/api/events?limit=4');
-            const evData = await evRes.json();
+            const evData = await API.getEvents(null, 4);
             recentEvents = evData.events || [];
-        } catch (e) { console.warn('Fail to load recent events'); }
+        } catch (e) { console.warn('Fail to load recent events', e); }
 
         container.innerHTML = `
         <div class="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

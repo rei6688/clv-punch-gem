@@ -1269,6 +1269,10 @@ nav {
 }
 
 /* Mobile Bottom Navigation */
+.mobile-nav {
+  display: none;
+}
+
 @media (max-width: 768px) {
   body {
     padding-bottom: 4rem;

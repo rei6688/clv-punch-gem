@@ -3,6 +3,7 @@
 const { getTelegramConfig, getFullDayState, setPeriodState, setIsEnabled, setIsOff } = require('../lib/kv');
 const { getVietnamDateKey, getCurrentPeriod } = require('../lib/time');
 const { answerCallback, editMessage, sendTelegram } = require('../lib/telegram');
+const { logSystemEvent } = require('../lib/db');
 
 // ─── Security: verify Telegram's built-in secret token (Option B) ────────────
 function verifyWebhookSecret(req) {
@@ -132,36 +133,50 @@ async function handleCallback(callback_query, config) {
     const token = config.token;
     let responseText = '';
     let newMsgText = msg.text;
+    let newButtons = null;
 
     if (data === 'sys_enable') {
         await setIsEnabled(true);
+        await logSystemEvent('update_config', { isEnabled: true }, 'telegram');
         responseText = '✅ Hệ thống đã BẬT!';
         newMsgText += '\n\n<b>✅ ACTION: Hệ thống đã được BẬT lại.</b>';
     } else if (data === 'sys_disable') {
         await setIsEnabled(false);
+        await logSystemEvent('update_config', { isEnabled: false }, 'telegram');
         responseText = '⏸ Hệ thống đã TẮT!';
         newMsgText += '\n\n<b>⏸ ACTION: Hệ thống đã được TẮT.</b>';
     } else if (data === 'punch_now' || data === 'mark_done') {
         const dateKey = getVietnamDateKey();
         const period = getCurrentPeriod();
         await setPeriodState(dateKey, period, 'manual_done', 'telegram');
+        await logSystemEvent('mark_done', { date: dateKey, period }, 'telegram');
         responseText = '✅ Đã ghi nhận Punch!';
         newMsgText += `\n\n<b>✅ ACTION: ${period.toUpperCase()} đã được mark DONE.</b>`;
+        newButtons = [[{ text: '🔄 Hoàn tác (Undo)', callback_data: 'undo_done' }]];
+    } else if (data === 'undo_done') {
+        const dateKey = getVietnamDateKey();
+        const period = getCurrentPeriod();
+        await setPeriodState(dateKey, period, 'pending', 'telegram');
+        await logSystemEvent('undo_done', { date: dateKey, period }, 'telegram');
+        responseText = '🔄 Đã reset về Auto-Punch!';
+        newMsgText += `\n\n<b>🔄 UNDO: ${period.toUpperCase()} đã được reset về PENDING (sẽ tiếp tục Auto-Punch).</b>`;
     } else if (data === 'mark_done_am') {
         const dateKey = getVietnamDateKey();
         await setPeriodState(dateKey, 'am', 'manual_done', 'telegram');
+        await logSystemEvent('mark_done', { date: dateKey, period: 'am' }, 'telegram');
         responseText = '🏢 Đã ghi nhận sáng DONE!';
         newMsgText += '\n\n<b>✅ ACTION: AM đã được mark DONE.</b>';
     } else if (data === 'mark_off_today') {
         const dateKey = getVietnamDateKey();
         await setIsOff(dateKey, true);
+        await logSystemEvent('mark_off_range', { start: dateKey, end: dateKey }, 'telegram');
         responseText = '🌴 Đã đánh dấu nghỉ hôm nay!';
         newMsgText += '\n\n<b>🌴 ACTION: Hôm nay đã đánh dấu NGHỈ.</b>';
     }
 
     await Promise.all([
         answerCallback(token, queryId, responseText),
-        editMessage(token, msg.chat.id, msg.message_id, newMsgText),
+        editMessage(token, msg.chat.id, msg.message_id, newMsgText, newButtons),
     ]);
 }
 
