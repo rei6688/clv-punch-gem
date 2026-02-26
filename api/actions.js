@@ -226,8 +226,10 @@ const handlers = {
     const { sendTelegram } = require('../lib/telegram');
     const now = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
     const result = await sendTelegram({
-      title: '🧪 Test kết nối từ CLV Punch',
-      message: `Telegram bot đã kết nối thành công! ✅\nThời gian: ${now}`,
+      text: `🧪 <b>Test kết nối từ CLV Punch</b>
+━━━━━━━━━━━━━━━━
+Telegram bot đã kết nối thành công! ✅
+Thời gian: ${now}`,
     });
     if (!result) return bad(400, 'Telegram chưa được cấu hình (token/chatId còn trống)');
     if (result.ok === false) return bad(400, result.description || 'Telegram API error');
