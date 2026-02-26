@@ -62,6 +62,7 @@ const handlers = {
 
     const metadata = { message: 'Marked done manually via API' };
     await setPeriodState(dateKey, period, 'manual_done', 'api', metadata);
+    await logSystemEvent('mark_done', { date: dateKey, period }, 'api').catch(e => console.warn(e.message));
 
     const periodText = period === 'am' ? 'Punch In (Sáng)' : 'Punch Out (Chiều)';
     await sendChat({
