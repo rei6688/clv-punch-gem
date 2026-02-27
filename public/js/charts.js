@@ -37,12 +37,12 @@ export function renderWeekView(records, currentDate, bulkState, config = {}) {
         if (d.isToday) cellClass += ' today';
         if (d.isWeekend) cellClass += ' weekend';
 
-        let modeIcon = '🏢';
+        let modeIcon = '<i data-lucide="building-2" class="w-3.5 h-3.5"></i>';
         let modeClass = 'wio';
         if (dayState) {
             const mode = dayState.effectiveMode || dayState.scheduleMode;
-            if (dayState.isOff || mode === 'off') { modeIcon = '🌴'; modeClass = 'off'; }
-            else if (mode === 'wfh') { modeIcon = '🏠'; modeClass = 'wfh'; }
+            if (dayState.isOff || mode === 'off') { modeIcon = '<i data-lucide="umbrella" class="w-3.5 h-3.5"></i>'; modeClass = 'off'; }
+            else if (mode === 'wfh') { modeIcon = '<i data-lucide="laptop" class="w-3.5 h-3.5"></i>'; modeClass = 'wfh'; }
         }
 
         let indicator = '';
@@ -132,16 +132,26 @@ export function renderMiniCalendar(records, currentDate, bulkState, config = {})
 
         if (isToday) cellClass += ' today';
 
-        // Mode icon badge with emojis on hover
+        // Mode icon badge
         if (dayState) {
             const mode = dayState.effectiveMode || dayState.scheduleMode;
             const isSwapped = dayState.modeOverride && dayState.modeOverride !== dayState.scheduleMode;
+
             if (dayState.isOff || mode === 'off') {
-                modeBadge = `<span class="cell-mode off" title="OFF"><span class="cell-badge">🌴</span></span>`;
+                modeBadge = `
+                    <div class="cell-mode off" title="Day Off">
+                        <i data-lucide="umbrella" class="w-3.5 h-3.5 text-orange-500"></i>
+                    </div>`;
             } else if (mode === 'wfh') {
-                modeBadge = `<span class="cell-mode wfh${isSwapped ? ' swapped' : ''}" title="${isSwapped ? 'Swapped to WFH' : 'WFH'}"><span class="cell-badge">🏠</span></span>`;
+                modeBadge = `
+                    <div class="cell-mode wfh ${isSwapped ? 'swapped' : ''}" title="${isSwapped ? 'Swapped: WFH' : 'WFH'}">
+                        <i data-lucide="laptop" class="w-3.5 h-3.5 text-primary"></i>
+                    </div>`;
             } else {
-                modeBadge = `<span class="cell-mode wio${isSwapped ? ' swapped' : ''}" title="${isSwapped ? 'Swapped to Office' : 'Office'}"><span class="cell-badge">🏢</span></span>`;
+                modeBadge = `
+                    <div class="cell-mode wio ${isSwapped ? 'swapped' : ''}" title="${isSwapped ? 'Swapped: Office' : 'Office'}">
+                        <i data-lucide="building-2" class="w-3.5 h-3.5 text-muted-foreground/60"></i>
+                    </div>`;
             }
         }
 
@@ -149,20 +159,20 @@ export function renderMiniCalendar(records, currentDate, bulkState, config = {})
         if (record) {
             if (record.isOff || (record.day && record.day.isOff)) {
                 cellClass += ' off-day';
-                indicator = '<div class="cell-indicator bg-orange-500"></div>';
+                indicator = '<div class="cell-indicator bg-orange-500 shadow-[0_0_5px_rgba(249,115,22,0.5)]"></div>';
             } else {
                 const amOk = record.periods?.am?.status === 'success' || record.periods?.am?.status === 'manual_done';
                 const pmOk = record.periods?.pm?.status === 'success' || record.periods?.pm?.status === 'manual_done';
 
                 if (amOk && pmOk) {
                     cellClass += ' success-day';
-                    indicator = '<div class="cell-indicator bg-green-500"></div>';
+                    indicator = '<div class="cell-indicator bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]"></div>';
                 } else if (amOk || pmOk) {
                     cellClass += ' partial-day';
-                    indicator = '<div class="cell-indicator bg-yellow-500"></div>';
+                    indicator = '<div class="cell-indicator bg-yellow-400 shadow-[0_0_5px_rgba(250,204,21,0.5)]"></div>';
                 } else if (record.periods?.am || record.periods?.pm) {
                     cellClass += ' fail-day';
-                    indicator = '<div class="cell-indicator bg-red-500"></div>';
+                    indicator = '<div class="cell-indicator bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]"></div>';
                 }
             }
         }
@@ -174,11 +184,11 @@ export function renderMiniCalendar(records, currentDate, bulkState, config = {})
         html += `
             <div class="${cellClass}" data-date="${dateStr}">
                 ${modeBadge}
-                <div class="absolute top-0.5 left-0.5 flex items-center gap-0.5 pointer-events-none opacity-60">
-                    ${autoRun ? '<i data-lucide="zap" class="w-1.5 h-1.5 text-primary fill-primary"></i>' : ''}
-                    ${isSwapped ? '<i data-lucide="repeat-2" class="w-1.5 h-1.5 text-amber-500"></i>' : ''}
+                <div class="absolute bottom-1 left-1 flex items-center gap-0.5 pointer-events-none opacity-40">
+                    ${autoRun ? '<i data-lucide="zap" class="w-2 h-2 text-primary fill-primary"></i>' : ''}
+                    ${isSwapped ? '<i data-lucide="repeat-2" class="w-2 h-2 text-amber-500"></i>' : ''}
                 </div>
-                <span class="cell-day">${day}</span>
+                <span class="cell-day relative z-10">${day}</span>
                 ${indicator}
             </div>
         `;

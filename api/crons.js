@@ -210,9 +210,6 @@ Muốn bật lại để punch hôm nay không?`,
       return ok({ message: `Skipped WFH reminder: Not in valid time window (Hour: ${currentHour}).` });
     }
 
-    const state = await getFullDayState(dateKey);
-    const mode = state.day.effectiveMode;
-
     if (mode === 'off') {
       return ok({ message: `Skipped: Day ${dateKey} is OFF.` });
     }

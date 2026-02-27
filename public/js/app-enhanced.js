@@ -42,6 +42,16 @@ function toast(msg, type = 'info') {
 // Helper Functions
 // ══════════════════════════════════════════════════════════════
 
+async function withLoading(btnElement, asyncFn) {
+    if (!btnElement || btnElement.classList.contains('loading')) return;
+    btnElement.classList.add('loading');
+    try {
+        await asyncFn();
+    } finally {
+        btnElement.classList.remove('loading');
+    }
+}
+
 function statusBadge(status, source) {
     let cls = "badge-pending", icon = "clock", text = "Pending";
     const isManual = status === 'manual_done' || source === 'api' || source === 'telegram';
@@ -240,9 +250,15 @@ function showMarkOffModal(dateHint = Utils.todayVN()) {
         selectedPartial = b.dataset.period;
     });
 
-    $('#off-clear').onclick = async () => { if (confirm('Clear OFF?')) { await API.clearOff(Utils.todayVN()); toast('Cleared', 'success'); close(); onHashChange(); } };
-    $('#off-submit').onclick = async () => {
-        const btn = $('#off-submit'); btn.disabled = true;
+    $('#off-clear').onclick = () => withLoading($('#off-clear'), async () => {
+        if (confirm('Clear OFF?')) {
+            await API.clearOff(Utils.todayVN());
+            toast('Cleared', 'success');
+            close();
+            onHashChange();
+        }
+    });
+    $('#off-submit').onclick = () => withLoading($('#off-submit'), async () => {
         try {
             if (tabs[0].classList.contains('active')) {
                 if (selectedDates.length < 2) throw new Error('Choose range');
@@ -251,9 +267,13 @@ function showMarkOffModal(dateHint = Utils.todayVN()) {
                 if (!selectedPartial) throw new Error('Select session');
                 await API.markDone(selectedPartial, $('#off-partial-date').value);
             }
-            toast('Vacation Saved 🌴', 'success'); close(); onHashChange();
-        } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
-    };
+            toast('Vacation Saved 🌴', 'success');
+            close();
+            onHashChange();
+        } catch (e) {
+            toast(e.message, 'error');
+        }
+    });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -472,10 +492,7 @@ function showSwapDayModal(schedule = {}) {
     const close = () => root.innerHTML = '';
     $$('.modal-close').forEach(b => b.onclick = close);
 
-    $('#swap-confirm').onclick = async () => {
-        const btn = $('#swap-confirm');
-        btn.disabled = true;
-        btn.textContent = 'Đang xử lý...';
+    $('#swap-confirm').onclick = () => withLoading($('#swap-confirm'), async () => {
         try {
             const entries = Object.entries(pendingSwaps);
             await Promise.all(entries.map(([date, toMode]) => API.swapDay(date, toMode)));
@@ -489,10 +506,8 @@ function showSwapDayModal(schedule = {}) {
             onHashChange();
         } catch (e) {
             toast(e.message || 'Có lỗi xảy ra', 'error');
-            btn.disabled = false;
-            btn.textContent = 'Xác nhận đổi';
         }
-    };
+    });
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -522,7 +537,11 @@ async function renderDashboard(container) {
             const d = new Date(monthDate);
             const y = d.getFullYear(), m = d.getMonth();
             const daysInMonth = new Date(y, m + 1, 0).getDate();
-            const dates = Array.from({ length: daysInMonth }, (_, i) => `${y}-${String(m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`);
+            // Safer date strings for bulk fetch
+            const dates = Array.from({ length: daysInMonth }, (_, i) => {
+                const dayDate = new Date(y, m, i + 1);
+                return dayDate.toLocaleDateString('en-CA');
+            });
             try {
                 return await API.getBulkState(dates);
             } catch { return {}; }
@@ -790,12 +809,21 @@ async function renderDashboard(container) {
             });
         };
         const rerenderCalendar = async () => {
-            const mStr = globalState.calendarMonth.toISOString().split('T')[0];
-            const bs = await fetchMonthBulkState(mStr);
-            $('#mini-calendar-container').innerHTML = Charts.renderMiniCalendar(records, mStr, bs, config);
-            lucide.createIcons();
-            attachNavListeners();
-            attachCalendarCellListeners(records, bs);
+            const mStr = globalState.calendarMonth.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+            const container = $('#mini-calendar-container');
+
+            // Show loading state
+            container.classList.add('loading');
+
+            try {
+                const bs = await fetchMonthBulkState(mStr);
+                container.innerHTML = Charts.renderMiniCalendar(records, mStr, bs, config);
+                lucide.createIcons();
+                attachNavListeners();
+                attachCalendarCellListeners(records, bs);
+            } finally {
+                container.classList.remove('loading');
+            }
         };
         attachNavListeners();
 
@@ -889,19 +917,26 @@ async function renderDashboard(container) {
 
         $('#qa-range-off').onclick = () => showMarkOffModal(date);
         $('#qa-swap-day').onclick = () => showSwapDayModal(schedule);
-        $('#qa-wfh').onclick = async () => { try { await API.markWfhToday(); toast('Manual Punch Sent!', 'success'); } catch (e) { toast(e.message, 'error'); } };
-        $('#qa-mark-am').onclick = async () => {
+        $('#qa-wfh').onclick = () => withLoading($('#qa-wfh'), async () => {
+            try {
+                await API.markWfhToday();
+                toast('Manual Punch Sent!', 'success');
+            } catch (e) {
+                toast(e.message, 'error');
+            }
+        });
+        $('#qa-mark-am').onclick = () => withLoading($('#qa-mark-am'), async () => {
             const isDone = $('#qa-mark-am').dataset.state === 'done';
             await API.markDone('am', date, isDone);
             toast(isDone ? 'Undo AM Done' : 'AM Marked Done', 'success');
             onHashChange();
-        };
-        $('#qa-mark-pm').onclick = async () => {
+        });
+        $('#qa-mark-pm').onclick = () => withLoading($('#qa-mark-pm'), async () => {
             const isDone = $('#qa-mark-pm').dataset.state === 'done';
             await API.markDone('pm', date, isDone);
             toast(isDone ? 'Undo PM Done' : 'PM Marked Done', 'success');
             onHashChange();
-        };
+        });
 
     } catch (e) {
         console.error('Dash error:', e);
@@ -1567,20 +1602,14 @@ async function renderSettings(container) {
         if (desc && modeDescMap[v]) desc.innerHTML = modeDescMap[v](d);
     });
 
-    $('#save-schedule').onclick = async () => {
-        const btn = $('#save-schedule');
-        btn.disabled = true;
-        btn.textContent = 'Saving...';
+    $('#save-schedule').onclick = () => withLoading($('#save-schedule'), async () => {
         try {
             await API.updateSchedule(currentSchedule);
             toast('Default Schedule Updated ✓', 'success');
         } catch (e) {
             toast('Save failed: ' + e.message, 'error');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Save Schedule';
         }
-    };
+    });
 
     // ── Load Active Swap Overrides ──────────────────────────
     const dayLabels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
@@ -1636,14 +1665,13 @@ async function renderSettings(container) {
             lucide.createIcons();
 
             $$('.swap-clear-btn').forEach(btn => {
-                btn.onclick = async () => {
-                    btn.disabled = true; btn.textContent = '...';
+                btn.onclick = () => withLoading(btn, async () => {
                     try {
                         await API.clearSwapOverride(btn.dataset.date);
                         toast(`Swap cleared: ${btn.dataset.date}`, 'success');
                         loadSwapOverrides();
-                    } catch (e) { toast('Clear failed: ' + e.message, 'error'); btn.disabled = false; btn.textContent = 'Clear'; }
-                };
+                    } catch (e) { toast('Clear failed: ' + e.message, 'error'); }
+                });
             });
         } catch (e) {
             container.innerHTML = `<p class="text-xs text-red-500 text-center py-4">${e.message}</p>`;
@@ -1651,58 +1679,43 @@ async function renderSettings(container) {
     };
     loadSwapOverrides();
 
-    $('#save-telegram').onclick = async () => {
-        const btn = $('#save-telegram');
-        btn.disabled = true; btn.textContent = 'Syncing...';
+    $('#save-telegram').onclick = () => withLoading($('#save-telegram'), async () => {
         try {
             await API.updateSettings({ telegram: { token: $('#tg-token').value, chatId: $('#tg-chatid').value } });
             toast('Bot Synced', 'success');
         } catch (e) { toast('Save failed: ' + e.message, 'error'); }
-        finally { btn.disabled = false; btn.textContent = 'Sync Bot'; }
-    };
+    });
     // Auto-fill webhook URL
     const webhookInput = $('#tg-webhook-url');
     if (webhookInput && !webhookInput.value) webhookInput.value = `${window.location.origin}/api/telegram-webhook`;
 
-    $('#test-telegram').onclick = async () => {
-        const btn = $('#test-telegram');
-        btn.disabled = true; btn.textContent = 'Sending...';
+    $('#test-telegram').onclick = () => withLoading($('#test-telegram'), async () => {
         try {
             await API.testTelegram();
             toast('Test message sent ✓ — check Telegram!', 'success');
         } catch (e) { toast('Test failed: ' + e.message, 'error'); }
-        finally { btn.disabled = false; btn.innerHTML = `<i data-lucide="zap" class="w-3.5 h-3.5 text-sky-500"></i>Test`; lucide.createIcons({ nodes: [btn] }); }
-    };
+    });
 
-    $('#test-telegram-real').onclick = async () => {
-        const btn = $('#test-telegram-real');
-        btn.disabled = true; btn.textContent = 'Sending...';
+    $('#test-telegram-real').onclick = () => withLoading($('#test-telegram-real'), async () => {
         try {
             await API.testTelegramReal();
             toast('Live notification simulated ✓', 'success');
         } catch (e) { toast('Simulation failed: ' + e.message, 'error'); }
-        finally { btn.disabled = false; btn.innerHTML = `<i data-lucide="bell" class="w-3.5 h-3.5 text-amber-500"></i>Simulate`; lucide.createIcons({ nodes: [btn] }); }
-    };
-    $('#register-webhook').onclick = async () => {
+    });
+    $('#register-webhook').onclick = () => withLoading($('#register-webhook'), async () => {
         const webhookUrl = ($('#tg-webhook-url').value || '').trim();
         if (!webhookUrl) { toast('Nhập Webhook URL trước', 'error'); return; }
-        const btn = $('#register-webhook');
-        btn.disabled = true; btn.textContent = 'Registering...';
         try {
             await API.registerTelegramWebhook(webhookUrl);
             toast('Webhook registered ✓', 'success');
         } catch (e) { toast('Register failed: ' + e.message, 'error'); }
-        finally { btn.disabled = false; btn.textContent = 'Register Webhook'; }
-    };
-    $('#save-times').onclick = async () => {
-        const btn = $('#save-times');
-        btn.disabled = true; btn.textContent = 'Saving...';
+    });
+    $('#save-times').onclick = () => withLoading($('#save-times'), async () => {
         try {
             await API.updateSettings({ times: { am: $('#time-am').value, noon: $('#time-noon').value, pm: $('#time-pm').value, offsetMin: parseInt($('#time-offset').value) } });
             toast('Rules Updated ✓', 'success');
         } catch (e) { toast('Save failed: ' + e.message, 'error'); }
-        finally { btn.disabled = false; btn.textContent = 'Save Rules'; }
-    };
+    });
 
     // Config Export/Import
     $('#export-config').onclick = () => {
