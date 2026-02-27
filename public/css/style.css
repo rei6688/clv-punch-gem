@@ -1754,18 +1754,25 @@ nav {
 .calendar-cell {
   aspect-ratio: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 700;
-  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+  border-radius: 0.75rem;
   cursor: pointer;
   position: relative;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: hsl(var(--muted)/0.1);
+  border: 1px solid transparent;
 }
 
 .calendar-cell:hover:not(.empty) {
-  background: hsl(var(--muted)/0.5);
+  background: hsl(var(--primary)/0.05);
+  border-color: hsl(var(--primary)/0.2);
+  transform: translateY(-2px);
+  z-index: 10;
+  box-shadow: 0 4px 12px -4px hsl(var(--primary)/0.2);
 }
 
 .calendar-cell.today {
@@ -1783,16 +1790,26 @@ nav {
 
 .cell-mode {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  font-size: 0.5rem;
+  top: 6px;
+  right: 6px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.calendar-cell:hover .cell-mode {
+  opacity: 1;
+}
+
+.cell-day {
+  margin-top: 4px;
 }
 
 .cell-indicator {
   position: absolute;
-  bottom: 4px;
-  width: 4px;
-  height: 4px;
+  top: 6px;
+  left: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
 }
 
@@ -1813,6 +1830,36 @@ nav {
     transform: translateY(-50%);
     width: auto;
   }
+}
+
+#mini-calendar-container {
+  position: relative;
+  transition: opacity 0.3s;
+}
+
+#mini-calendar-container.loading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: hsl(var(--background)/0.5);
+  backdrop-filter: blur(2px);
+  z-index: 20;
+  border-radius: 1rem;
+}
+
+#mini-calendar-container.loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2rem;
+  height: 2rem;
+  margin: -1rem 0 0 -1rem;
+  border: 3px solid hsl(var(--primary));
+  border-right-color: transparent;
+  border-radius: 50%;
+  z-index: 21;
+  animation: btn-spin 0.8s linear infinite;
 }
 
 /* --- Loading State --- */

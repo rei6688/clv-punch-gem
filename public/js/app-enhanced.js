@@ -537,7 +537,11 @@ async function renderDashboard(container) {
             const d = new Date(monthDate);
             const y = d.getFullYear(), m = d.getMonth();
             const daysInMonth = new Date(y, m + 1, 0).getDate();
-            const dates = Array.from({ length: daysInMonth }, (_, i) => `${y}-${String(m + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`);
+            // Safer date strings for bulk fetch
+            const dates = Array.from({ length: daysInMonth }, (_, i) => {
+                const dayDate = new Date(y, m, i + 1);
+                return dayDate.toLocaleDateString('en-CA');
+            });
             try {
                 return await API.getBulkState(dates);
             } catch { return {}; }
@@ -805,12 +809,21 @@ async function renderDashboard(container) {
             });
         };
         const rerenderCalendar = async () => {
-            const mStr = globalState.calendarMonth.toISOString().split('T')[0];
-            const bs = await fetchMonthBulkState(mStr);
-            $('#mini-calendar-container').innerHTML = Charts.renderMiniCalendar(records, mStr, bs, config);
-            lucide.createIcons();
-            attachNavListeners();
-            attachCalendarCellListeners(records, bs);
+            const mStr = globalState.calendarMonth.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+            const container = $('#mini-calendar-container');
+
+            // Show loading state
+            container.classList.add('loading');
+
+            try {
+                const bs = await fetchMonthBulkState(mStr);
+                container.innerHTML = Charts.renderMiniCalendar(records, mStr, bs, config);
+                lucide.createIcons();
+                attachNavListeners();
+                attachCalendarCellListeners(records, bs);
+            } finally {
+                container.classList.remove('loading');
+            }
         };
         attachNavListeners();
 
